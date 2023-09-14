@@ -32,6 +32,84 @@
  ****************************************************************************/
 
 /****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: up_idlepm
+ *
+ * Description:
+ *   Perform IDLE state power management.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_PM
+static void up_idlepm(void)
+{
+  static enum pm_state_e oldstate = PM_NORMAL;
+  enum pm_state_e newstate;
+  irqstate_t flags;
+  int ret;
+
+  /* Decide, which power saving level can be obtained */
+
+  newstate = pm_checkstate(PM_IDLE_DOMAIN);
+
+  /* Check for state changes */
+
+  if (newstate != oldstate)
+    {
+      flags = irqsave();
+
+      /* Perform board-specific, state-dependent logic here */
+
+      _info("newstate= %d oldstate=%d\n", newstate, oldstate);
+
+      /* Then force the global state change */
+
+      ret = pm_changestate(PM_IDLE_DOMAIN, newstate);
+      if (ret < 0)
+        {
+          /* The new state change failed, revert to the preceding state */
+
+          (void)pm_changestate(PM_IDLE_DOMAIN, oldstate);
+        }
+      else
+        {
+          /* Save the new state */
+
+          oldstate = newstate;
+        }
+
+      /* MCU-specific power management logic */
+
+      switch (newstate)
+        {
+        case PM_NORMAL:
+          break;
+
+        case PM_IDLE:
+          break;
+
+        case PM_STANDBY:
+          break;
+
+        case PM_SLEEP:
+          break;
+
+        default:
+          break;
+        }
+
+      irqrestore(flags);
+    }
+}
+#else
+#  define up_idlepm()
+#endif
+
+
+/****************************************************************************
  * Name: up_idle
  *
  * Description:
@@ -56,6 +134,14 @@ void up_idle(void)
 
   /* Sleep until an interrupt occurs to save power */
 
-  asm("WFI");
+  up_idlepm();
 #endif
 }
+
+#ifdef CONFIG_PM
+void arm_pminitialize(void)
+{
+  /* Then initialize the TinyAra power management subsystem proper */
+  pm_initialize();
+}
+#endif

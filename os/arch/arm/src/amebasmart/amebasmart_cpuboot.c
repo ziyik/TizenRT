@@ -84,7 +84,7 @@ extern uint8_t _vector_start[]; /* Beginning of vector block */
 
 void amebasmart_cpu_disable(void)
 {
-  vPortSecondaryOff();
+
 }
 
 /****************************************************************************
@@ -106,7 +106,7 @@ void amebasmart_cpu_disable(void)
 
 void amebasmart_cpu_enable(void)
 {
-  vPortSecondaryStart();
+
 }
 
 /****************************************************************************
