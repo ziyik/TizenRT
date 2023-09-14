@@ -74,7 +74,11 @@ void vPortSecondaryOff(void)
 
 	/* Notify secondary core to migrate task to primary core and enter wfi*/
 	pmu_set_secondary_cpu_state(1, CPU1_HOTPLUG);
+#ifndef CONFIG_PLATFORM_TIZENRT_OS
 	arm_gic_raise_softirq(1, 1);
+#else
+	sys_write32(1 << (16 + 1) | 1, AMEBASMART_GIC_VBASE + GIC_ICDSGIR_OFFSET);
+#endif
 #endif
 	//add a delay to wait cpu1 enter wfi.
 	DelayUs(100);
