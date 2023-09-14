@@ -364,16 +364,6 @@ void arm_boot(void)
 
   arm_fpuconfig();
 
-  /* Perform board-specific memory initialization,  This must include
-   * initialization of board-specific memory resources (e.g., SDRAM)
-   *
-   * NOTE: We must use caution prior to this point to make sure that
-   * the logic does not access any global variables that might lie
-   * in SDRAM.
-   */
-
-  amebasmart_memory_initialize();
-
 #ifdef NEED_SDRAM_REMAPPING
   /* SDRAM was configured in a temporary state to support low-level
    * initialization.  Now that the SDRAM has been fully initialized,

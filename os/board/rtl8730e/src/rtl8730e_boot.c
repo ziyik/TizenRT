@@ -272,11 +272,6 @@ void amebasmart_mount_partitions(void)
 #endif /* CONFIG_FLASH_PARTITION */
 }
 
-void amebasmart_memory_initialize(void)
-{
-
-}
-
 /****************************************************************************
  * Name: board_initialize
  *
