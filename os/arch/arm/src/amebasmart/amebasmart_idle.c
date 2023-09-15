@@ -27,6 +27,10 @@
 #include <tinyara/arch.h>
 #include "arm_internal.h"
 
+#ifdef CONFIG_PM
+#include <tinyara/pm/pm.h>
+#endif
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -46,68 +50,60 @@
 #ifdef CONFIG_PM
 static void up_idlepm(void)
 {
-  static enum pm_state_e oldstate = PM_NORMAL;
-  enum pm_state_e newstate;
-  irqstate_t flags;
-  int ret;
+	static enum pm_state_e oldstate = PM_NORMAL;
+	enum pm_state_e newstate;
+	irqstate_t flags;
+	int ret;
 
-  /* Decide, which power saving level can be obtained */
+	/* Decide, which power saving level can be obtained */
+	newstate = pm_checkstate(PM_IDLE_DOMAIN);
 
-  newstate = pm_checkstate(PM_IDLE_DOMAIN);
+	/* Check for state changes */
+	if (newstate != oldstate)
+	{
+		flags = irqsave();
 
-  /* Check for state changes */
+		/* Perform board-specific, state-dependent logic here */
+		printf("newstate= %d oldstate=%d\n", newstate, oldstate);
 
-  if (newstate != oldstate)
-    {
-      flags = irqsave();
+		/* Then force the global state change */
+		ret = pm_changestate(PM_IDLE_DOMAIN, newstate);
+		if (ret < 0)
+		{
+			/* The new state change failed, revert to the preceding state */
+			(void)pm_changestate(PM_IDLE_DOMAIN, oldstate);
+		}
+		else
+		{
+			/* Save the new state */
+			oldstate = newstate;
+		}
 
-      /* Perform board-specific, state-dependent logic here */
+		/* MCU-specific power management logic */
+		switch (newstate)
+		{
+		case PM_NORMAL:
+			break;
 
-      _info("newstate= %d oldstate=%d\n", newstate, oldstate);
+		case PM_IDLE:
+			break;
 
-      /* Then force the global state change */
+		case PM_STANDBY:
+			break;
 
-      ret = pm_changestate(PM_IDLE_DOMAIN, newstate);
-      if (ret < 0)
-        {
-          /* The new state change failed, revert to the preceding state */
+		case PM_SLEEP:
+			break;
 
-          (void)pm_changestate(PM_IDLE_DOMAIN, oldstate);
-        }
-      else
-        {
-          /* Save the new state */
+		default:
+			break;
+		}
 
-          oldstate = newstate;
-        }
-
-      /* MCU-specific power management logic */
-
-      switch (newstate)
-        {
-        case PM_NORMAL:
-          break;
-
-        case PM_IDLE:
-          break;
-
-        case PM_STANDBY:
-          break;
-
-        case PM_SLEEP:
-          break;
-
-        default:
-          break;
-        }
-
-      irqrestore(flags);
-    }
+		irqrestore(flags);
+	}
 }
 #else
-#  define up_idlepm()
+#	define up_idlepm()
 #endif
-
 
 /****************************************************************************
  * Name: up_idle
@@ -125,23 +121,23 @@ static void up_idlepm(void)
 void up_idle(void)
 {
 #if defined(CONFIG_SUPPRESS_INTERRUPTS) || defined(CONFIG_SUPPRESS_TIMER_INTS)
-  /* If the system is idle and there are no timer interrupts, then process
-   * "fake" timer interrupts. Hopefully, something will wake up.
-   */
+	/* If the system is idle and there are no timer interrupts, then process
+	 * "fake" timer interrupts. Hopefully, something will wake up.
+	 */
 
-  nxsched_process_timer();
+	nxsched_process_timer();
 #else
 
-  /* Sleep until an interrupt occurs to save power */
+	/* Sleep until an interrupt occurs to save power */
 
-  up_idlepm();
+	up_idlepm();
 #endif
 }
 
 #ifdef CONFIG_PM
 void arm_pminitialize(void)
 {
-  /* Then initialize the TinyAra power management subsystem proper */
-  pm_initialize();
+	/* Then initialize the TinyAra power management subsystem proper */
+	pm_initialize();
 }
 #endif

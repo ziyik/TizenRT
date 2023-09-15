@@ -20,6 +20,7 @@ extern "C"
 #define RTK_BLE_GAP_MAX_LINKS               4
 #define RTK_BLE_SUPPORT                     1
 #define RTK_BREDR_SUPPORT                   0
+#define RTK_BT_POWER_CONTROL_SUPPORT        1
 #define RTK_BLE_SET_TX_QUEUE_NUM            0
 
 #if defined(RTK_BLE_SUPPORT) && RTK_BLE_SUPPORT
