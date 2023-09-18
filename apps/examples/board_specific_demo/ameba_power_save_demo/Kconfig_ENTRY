@@ -1,0 +1,3 @@
+config ENTRY_POWERSAVE
+	bool "POWER SAVE example"
+	depends on EXAMPLES_POWERSAVE

@@ -1,0 +1,14 @@
+#
+# For a description of the syntax of this configuration file,
+# see kconfig-language at https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt
+#
+
+config EXAMPLES_POWERSAVE
+	bool "POWER SAVE example"
+	default n
+	---help---
+		Enable POWER SAVE Example
+
+config USER_ENTRYPOINT
+	string
+	default "powersave" if ENTRY_POWERSAVE
