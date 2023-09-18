@@ -572,4 +572,14 @@ int arm_gic_irq_trigger(int irq, bool edge)
   return -EINVAL;
 }
 
+#ifdef CONFIG_SMP
+void arm_gic_raise_softirq(uint32_t cpu, uint32_t irq)
+{
+	if (irq > 15 || cpu > 7) {
+		return;
+	}
+	putreg32(1 << (16 + cpu) | irq, GIC_ICDSGIR);
+}
+#endif
+
 #endif /* CONFIG_ARMV7A_HAVE_GICv2 */
