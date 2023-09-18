@@ -16,7 +16,7 @@
 #
 ###########################################################################
 ############################################################################
-# apps/examples/board_specific_demo/ameba_wifi_csi_demo/Makefile
+# apps/examples/board_specific_demo/ameba_power_save_demo/Makefile
 #
 #   Copyright (C) 2008, 2010-2013 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -94,8 +94,8 @@ else
   INSTALL_DIR = $(BIN_DIR)
 endif
 
-CONFIG_EXAMPLES_WIFICSI_PROGNAME ?= wificsi$(EXEEXT)
-PROGNAME = $(CONFIG_EXAMPLES_WIFICSI_PROGNAME)
+CONFIG_EXAMPLES_POWERSAVE_PROGNAME ?= powersave$(EXEEXT)
+PROGNAME = $(CONFIG_EXAMPLES_POWERSAVE_PROGNAME)
 
 ROOTDEPPATH = --dep-path .
 
@@ -129,7 +129,7 @@ install:
 
 endif
 
-ifeq ($(CONFIG_BUILTIN_APPS)$(CONFIG_EXAMPLES_WIFICSI),yy)
+ifeq ($(CONFIG_BUILTIN_APPS)$(CONFIG_EXAMPLES_POWERSAVE),yy)
 $(BUILTIN_REGISTRY)$(DELIM)$(FUNCNAME).bdat: $(DEPCONFIG) Makefile
 	$(Q) $(call REGISTER,$(APPNAME),$(FUNCNAME),$(THREADEXEC),$(PRIORITY),$(STACKSIZE))
 

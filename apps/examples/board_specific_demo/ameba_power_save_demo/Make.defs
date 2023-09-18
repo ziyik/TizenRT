@@ -16,7 +16,7 @@
 #
 ###########################################################################
 ############################################################################
-# apps/examples/board_specific_demo/ameba_wifi_csi_demo/Make.defs
+# apps/examples/board_specific_demo/ameba_power_save_demo/Make.defs
 # Adds selected applications to apps/ build
 #
 #   Copyright (C) 2015 Gregory Nutt. All rights reserved.
