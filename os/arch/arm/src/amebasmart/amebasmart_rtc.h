@@ -86,6 +86,11 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+//Exposed RTC functions for reference in idle.c
+int up_rtc_gettime(FAR struct timespec *tp);
+
+time_t up_rtc_time(void);
+
 #ifndef __ASSEMBLY__
 
 #undef EXTERN
