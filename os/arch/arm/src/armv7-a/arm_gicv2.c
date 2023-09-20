@@ -605,5 +605,14 @@ void up_set_pending_irq(int irq)
 	putreg32((1 << int_off), GIC_ICDISPR(int_grp * 4));
 }
 
+void up_clear_pending_irq(int irq)
+{
+	int int_grp, int_off;
+
+	int_grp = irq / 32;
+	int_off = irq % 32;
+
+	putreg32((1 << int_off), GIC_ICDICPR_OFFSET(int_grp * 4));
+}
 
 #endif /* CONFIG_ARMV7A_HAVE_GICv2 */
