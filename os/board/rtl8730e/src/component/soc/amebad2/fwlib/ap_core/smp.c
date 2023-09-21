@@ -11,8 +11,12 @@
 #include "task.h"
 #endif
 
+#ifdef CONFIG_PLATFORM_TIZENRT_OS
+extern void __cpu1_start(void);
+#else
 extern void _boot(void);
 extern void vPortRestoreTaskContext(void);
+#endif
 
 /*-----------------------------------------------------------*/
 
@@ -94,6 +98,7 @@ void vPortSecondaryOff(void)
 	debug_printf("Secondary core power off fail: %d\n", state);
 }
 
+#ifndef CONFIG_PLATFORM_TIZENRT_OS
 void vPortSecondaryStart(void)
 {
 	debug_printf("CPU%d: on\n", (int)portGET_CORE_ID());
@@ -118,6 +123,7 @@ void vPortSecondaryStart(void)
 	/* Start the first task executing. */
 	vPortRestoreTaskContext();
 }
+#endif
 /*-----------------------------------------------------------*/
 
 void smp_init(void)
@@ -139,12 +145,12 @@ void smp_init(void)
 #endif
 
 	for (xCoreID = 0; xCoreID < configNUM_CORES; xCoreID++) {
-		if (xCoreID == portGET_CORE_ID()) {
+		if (xCoreID == up_cpu_index()) {
 			pmu_set_secondary_cpu_state(xCoreID, CPU1_RUNNING);
 			continue;
 		}
 
-		err = psci_cpu_on(xCoreID, (unsigned long)_boot);
+		err = psci_cpu_on(xCoreID, (unsigned long)__cpu1_start);
 		if (err < 0) {
 			debug_printf("CPU%d: failed to boot: %d\n", (int)xCoreID, (int)err);
 		}

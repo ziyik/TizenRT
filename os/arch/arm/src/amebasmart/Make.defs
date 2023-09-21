@@ -191,6 +191,11 @@ ifeq ($(CONFIG_SMP),y)
   CMN_CSRCS += arm_scu.c
 endif
 
+ifeq ($(CONFIG_PM),y)
+  CMN_CSRCS += psci.c ameba_pmc.c
+  CMN_ASRCS += a32_pm.S
+endif
+
 ARCH_SRCDIR = $(TOPDIR)/arch/$(CONFIG_ARCH)/src/
 
 CFLAGS += -I$(TOPDIR)/board/$(CONFIG_ARCH_BOARD)/src/component/soc/amebad2/fwlib/include

@@ -16,7 +16,7 @@ static uint32_t sysactive_timeout_temp = 0;
 static uint32_t sysactive_timeout_flag = 0;
 
 
-#ifdef ARM_CORE_CA32
+#ifdef CONFIG_ARCH_CORTEXA32
 /* Add declaration here for TizenRT to compile */
 #ifndef configNUM_CORES
 #define configNUM_CORES			1
@@ -321,7 +321,7 @@ void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 	}
 }
 
-#elif defined (ARM_CORE_CA32)
+#elif defined (CONFIG_ARCH_CORTEXA32)
 
 void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 {
@@ -440,7 +440,7 @@ void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 CONFIG_FW_CRITICAL_CODE_SECTION
 void tizenrt_post_sleep_processing(uint32_t *expected_idle_time)
 {
-#ifndef ARM_CORE_CA32
+#ifndef CONFIG_ARCH_CORTEXA32
 #ifndef configSYSTICK_CLOCK_HZ
 	*expected_idle_time = 1 + (SysTick->VAL / (configCPU_CLOCK_HZ / configTICK_RATE_HZ));
 #else
@@ -454,7 +454,7 @@ void tizenrt_post_sleep_processing(uint32_t *expected_idle_time)
 
 }
 
-#ifndef ARM_CORE_CA32
+#ifndef CONFIG_ARCH_CORTEXA32
 /* NVIC will power off under sleep power gating mode, so we can */
 /* not use systick like TizenRT default implementation */
 CONFIG_FW_CRITICAL_CODE_SECTION
@@ -550,9 +550,11 @@ void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime)
 		method as that will mask interrupts that should exit sleep mode. */
 		portDISABLE_INTERRUPTS();
 
-		portGET_TASK_LOCK();
-		eSleepStatus = eTaskConfirmSleepModeStatus();
-		portRELEASE_TASK_LOCK();
+		// TASK_LOCK is for secondary core, current stage comment it first
+		// portGET_TASK_LOCK();
+		// TizenRT PM module will determine status based on CPU loading, thus might not need to check CPU status again
+		// eSleepStatus = eTaskConfirmSleepModeStatus();
+		// portRELEASE_TASK_LOCK();
 
 		/* If a context switch is pending or a task is waiting for the scheduler
 		to be unsuspended then abandon the low power entry. */
@@ -646,7 +648,7 @@ EXIT:
 void pmu_acquire_wakelock(uint32_t nDeviceId)
 {
 	u32 PrevStatus;
-#ifndef ARM_CORE_CA32
+#ifndef CONFIG_ARCH_CORTEXA32
 	PrevStatus = ulSetInterruptMaskFromISR();
 #else
 	PrevStatus = portDISABLE_INTERRUPTS();
@@ -654,7 +656,7 @@ void pmu_acquire_wakelock(uint32_t nDeviceId)
 
 	wakelock |= BIT(nDeviceId);
 
-#ifndef ARM_CORE_CA32
+#ifndef CONFIG_ARCH_CORTEXA32
 	vClearInterruptMaskFromISR(PrevStatus);
 #else
 	portRESTORE_INTERRUPTS(PrevStatus);
@@ -664,7 +666,7 @@ void pmu_acquire_wakelock(uint32_t nDeviceId)
 void pmu_release_wakelock(uint32_t nDeviceId)
 {
 	u32 PrevStatus;
-#ifndef ARM_CORE_CA32
+#ifndef CONFIG_ARCH_CORTEXA32
 	PrevStatus = ulSetInterruptMaskFromISR();
 #else
 	PrevStatus = portDISABLE_INTERRUPTS();
@@ -672,7 +674,7 @@ void pmu_release_wakelock(uint32_t nDeviceId)
 
 	wakelock &= ~BIT(nDeviceId);
 
-#ifndef ARM_CORE_CA32
+#ifndef CONFIG_ARCH_CORTEXA32
 	vClearInterruptMaskFromISR(PrevStatus);
 #else
 	portRESTORE_INTERRUPTS(PrevStatus);
@@ -746,7 +748,7 @@ void pmu_tickless_debug(u32 NewStatus)
 	}
 }
 
-#ifdef ARM_CORE_CA32
+#ifdef CONFIG_ARCH_CORTEXA32
 void pmu_set_secondary_cpu_state(uint32_t CoreID, uint32_t NewStatus)
 {
 	cpuhp_flag[CoreID] = NewStatus;
