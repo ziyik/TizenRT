@@ -28,6 +28,9 @@
 #include <tinyara/net/if/ble.h>
 #include <ble_tizenrt_service.h>
 #include <debug.h>
+#if defined(RTK_BT_POWER_CONTROL_SUPPORT) && RTK_BT_POWER_CONTROL_SUPPORT
+#include "rtk_bt_power_control.h"
+#endif
 
 #define RTK_BT_DEV_NAME "BLE_TIZENRT"
 
@@ -138,115 +141,6 @@ static rtk_bt_le_security_param_t sec_param = {
 static bool privacy_enable = false;
 static bool privacy_whitelist = true;
 static uint8_t privacy_irk[RTK_BT_LE_GAP_IRK_LEN] = "abcdef0123456789";
-#endif
-
-#if defined(RTK_BT_POWER_CONTROL_SUPPORT) && RTK_BT_POWER_CONTROL_SUPPORT
-#define BT_POWER_TEST_MODE          1
-#if defined(BT_POWER_TEST_MODE) && BT_POWER_TEST_MODE
-#include "rtk_bt_power_control.h"
-#include "ameba_soc.h"
-#include "wifi_conf.h"
-
-#define BT_POWER_TEST_START_TIME    5	//Unit:s
-#define BT_POWER_TEST_WAKE_TIME     5	//Unit:s
-
-static void *bt_power_test_start_timer_hdl = NULL;
-static void *bt_power_test_wake_timer_hdl = NULL;
-
-extern int wifi_set_ips_internal(u8 enable);
-
-static void system_enable_power_save(void)
-{
-	/* Release other wake lock if needed */
-	wifi_set_lps_enable(TRUE);
-	wifi_set_ips_internal(TRUE);
-}
-
-static void bt_power_test_start_timeout_handler(void *arg)
-{
-	(void)arg;
-printf("[BT_PS] Enter bt_power_test_start_timeout_handler\r\n");
-	rtk_bt_enable_power_save();
-	system_enable_power_save();
-}
-
-static void bt_power_test_wake_timeout_handler(void *arg)
-{
-	(void)arg;
-printf("[BT_PS] Enter bt_power_test_wake_timeout_handler\r\n");
-	rtk_bt_enable_power_save();
-}
-
-static void bt_power_test_suspend(void)
-{
-	printf("[BT_PS] Enter bt_power_test_suspend\r\n");
-}
-
-static void bt_power_test_resume(void)
-{
-	printf("[BT_PS] Enter bt_power_test_resume\r\n");
-
-	if (BT_POWER_TEST_WAKE_TIME != 0) {
-		osif_timer_restart(&bt_power_test_wake_timer_hdl, BT_POWER_TEST_WAKE_TIME * 1000);
-	} else {
-		rtk_bt_enable_power_save();
-		system_enable_power_save();
-	}
-}
-
-static void bt_power_test_init(void)
-{
-	osif_timer_create(&bt_power_test_start_timer_hdl, "bt_power_test_start_timer", NULL, BT_POWER_TEST_START_TIME * 1000, false, bt_power_test_start_timeout_handler);
-	if (bt_power_test_start_timer_hdl == NULL) {
-		printf("[BT_PS] bt_power_test_start_timer create failed!\r\n");
-		goto exit;
-	}
-
-	if (BT_POWER_TEST_WAKE_TIME != 0) {
-		osif_timer_create(&bt_power_test_wake_timer_hdl, "bt_power_test_wake_timer", NULL, BT_POWER_TEST_WAKE_TIME * 3000, false, bt_power_test_wake_timeout_handler);
-		if (bt_power_test_wake_timer_hdl == NULL) {
-			printf("[BT_PS] bt_power_test_wake_timer create failed!\r\n");
-			goto exit;
-		}
-	}
-
-	rtk_bt_power_save_init((rtk_bt_ps_callback)bt_power_test_suspend, (rtk_bt_ps_callback)bt_power_test_resume);
-
-	osif_timer_start(&bt_power_test_start_timer_hdl);
-
-	return;
-
-exit:
-	if (BT_POWER_TEST_WAKE_TIME != 0) {
-		if (bt_power_test_wake_timer_hdl) {
-			osif_timer_delete(&bt_power_test_wake_timer_hdl);
-			bt_power_test_wake_timer_hdl = NULL;
-		}
-	}
-
-	if (bt_power_test_start_timer_hdl) {
-		osif_timer_delete(&bt_power_test_start_timer_hdl);
-		bt_power_test_start_timer_hdl = NULL;
-	}
-}
-
-static void bt_power_test_deinit(void)
-{
-	rtk_bt_power_save_deinit();
-
-	if (BT_POWER_TEST_WAKE_TIME != 0) {
-		if (bt_power_test_wake_timer_hdl) {
-			osif_timer_delete(&bt_power_test_wake_timer_hdl);
-			bt_power_test_wake_timer_hdl = NULL;
-		}
-	}
-
-	if (bt_power_test_start_timer_hdl) {
-		osif_timer_delete(&bt_power_test_start_timer_hdl);
-		bt_power_test_start_timer_hdl = NULL;
-	}
-}
-#endif
 #endif
 
 typedef struct {
@@ -973,14 +867,14 @@ int ble_tizenrt_scatternet_main(uint8_t enable)
         BT_APP_PROCESS(rtk_bt_evt_register_callback(RTK_BT_LE_GP_GATTC, 
                                                     ble_tizenrt_scatternet_gattc_app_callback));
         BT_APP_PROCESS(general_client_add());
-#if (defined(BT_POWER_TEST_MODE) && BT_POWER_TEST_MODE) && (defined(RTK_BT_POWER_CONTROL_SUPPORT) && RTK_BT_POWER_CONTROL_SUPPORT)
-		bt_power_test_init();
+#if (defined(RTK_BT_POWER_CONTROL_SUPPORT) && RTK_BT_POWER_CONTROL_SUPPORT)
+		rtk_bt_power_save_init();
 #endif
 	}
 	else if (0 == enable)
     {
-#if (defined(BT_POWER_TEST_MODE) && BT_POWER_TEST_MODE) && (defined(RTK_BT_POWER_CONTROL_SUPPORT) && RTK_BT_POWER_CONTROL_SUPPORT)
-		bt_power_test_deinit();
+#if (defined(RTK_BT_POWER_CONTROL_SUPPORT) && RTK_BT_POWER_CONTROL_SUPPORT)
+		rtk_bt_power_save_deinit();
 #endif
 		BT_APP_PROCESS(general_client_delete());
 

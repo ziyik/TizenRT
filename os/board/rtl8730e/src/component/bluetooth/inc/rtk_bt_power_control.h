@@ -40,11 +40,10 @@ void rtk_bt_disable_power_save(void);
 
 /**
 * @brief     bt power save init.
-* @param[in] p_suspend_callback: callback invoked before system entering power save mode.
-* @param[in] p_resume_callback: callback invoked after system waking from power save mode.
+* @param     None
 * @return    None
 */
-void rtk_bt_power_save_init(rtk_bt_ps_callback p_suspend_callback, rtk_bt_ps_callback p_resume_callback);
+void rtk_bt_power_save_init(void);
 
 /**
 * @brief     bt power save deinit.

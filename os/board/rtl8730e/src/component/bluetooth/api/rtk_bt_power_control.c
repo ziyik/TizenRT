@@ -16,16 +16,50 @@
 #endif
 #include "rtk_bt_power_control.h"
 #include "ameba_soc.h"
+#include "wifi_conf.h"
 
 rtk_bt_ps_callback rtk_bt_suspend_callback = NULL;
 rtk_bt_ps_callback rtk_bt_resume_callback = NULL;
 
-#if defined(CONFIG_BT_SINGLE_CORE) && CONFIG_BT_SINGLE_CORE
-_WEAK void hci_platform_force_uart_rts(bool op)
+extern int wifi_set_ips_internal(u8 enable);
+static void system_enable_power_save(void)
 {
-	(void) op;
+	/* Release other wake lock if needed */
+	wifi_set_lps_enable(TRUE);
+	wifi_set_ips_internal(TRUE);
 }
-#endif
+
+static void bt_power_test_start_timeout_handler(void *arg)
+{
+	(void)arg;
+printf("[BT_PS] Enter bt_power_test_start_timeout_handler\r\n");
+	rtk_bt_enable_power_save();
+	system_enable_power_save();
+}
+
+static void bt_power_test_wake_timeout_handler(void *arg)
+{
+	(void)arg;
+printf("[BT_PS] Enter bt_power_test_wake_timeout_handler\r\n");
+	rtk_bt_enable_power_save();
+}
+
+static void bt_power_test_suspend(void)
+{
+	printf("[BT_PS] Enter bt_power_test_suspend\r\n");
+}
+
+static void bt_power_test_resume(void)
+{
+	printf("[BT_PS] Enter bt_power_test_resume\r\n");
+
+	//if (BT_POWER_TEST_WAKE_TIME != 0) {
+	//	osif_timer_restart(&bt_power_test_wake_timer_hdl, BT_POWER_TEST_WAKE_TIME * 1000);
+	//} else {
+		rtk_bt_enable_power_save();
+		system_enable_power_save();
+	//}
+}
 
 static bool rtk_bt_get_power_save_status(void)
 {
@@ -70,7 +104,7 @@ static void rtk_bt_enable_bt_wake_host(void)
 	if (irq_get_pending(BT_WAKE_HOST_IRQ)) {
 		irq_clear_pending(BT_WAKE_HOST_IRQ);
 	}
-	
+
 	/* enable BT_WAKE_HOST interrupt */
 	InterruptEn(BT_WAKE_HOST_IRQ, INT_PRI_LOWEST);
 }
@@ -134,10 +168,11 @@ static uint32_t rtk_bt_wake_host_irq_handler(void *data)
 	return 1;
 }
 
-void rtk_bt_power_save_init(rtk_bt_ps_callback p_suspend_callback, rtk_bt_ps_callback p_resume_callback)
+void rtk_bt_power_save_init(void)
 {
-	rtk_bt_suspend_callback = p_suspend_callback;
-	rtk_bt_resume_callback = p_resume_callback;
+#ifdef CONFIG_PM	/* If PM is enable inti BT power save */
+	rtk_bt_suspend_callback = bt_power_test_suspend;
+	rtk_bt_resume_callback = bt_power_test_resume;
 
 #if defined(CONFIG_BT_AP) && CONFIG_BT_AP
 	int *ret = NULL;
@@ -149,10 +184,12 @@ void rtk_bt_power_save_init(rtk_bt_ps_callback p_suspend_callback, rtk_bt_ps_cal
 	pmu_register_sleep_callback(PMU_BT_DEVICE, (PSM_HOOK_FUN)rtk_bt_suspend, NULL, (PSM_HOOK_FUN)rtk_bt_resume, NULL);
 
 	InterruptRegister((IRQ_FUN)rtk_bt_wake_host_irq_handler, BT_WAKE_HOST_IRQ, NULL, INT_PRI_LOWEST);
+#endif
 }
 
 void rtk_bt_power_save_deinit(void)
 {
+#ifdef CONFIG_PM
 	InterruptDis(BT_WAKE_HOST_IRQ);
 	InterruptUnRegister(BT_WAKE_HOST_IRQ);
 
@@ -166,5 +203,6 @@ void rtk_bt_power_save_deinit(void)
 
 	rtk_bt_suspend_callback = NULL;
 	rtk_bt_resume_callback = NULL;
+#endif
 }
 #endif
