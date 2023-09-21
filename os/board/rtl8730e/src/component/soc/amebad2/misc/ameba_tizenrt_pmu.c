@@ -27,7 +27,7 @@ volatile u32 cpuhp_flag[configNUM_CORES];
 
 u32 tickless_debug = 0;
 
-/* ++++++++ FreeRTOS macro implementation ++++++++ */
+/* ++++++++ TizenRT macro implementation ++++++++ */
 
 /* psm dd hook info */
 PSM_DD_HOOK_INFO gPsmDdHookInfo[PMU_MAX];
@@ -73,7 +73,7 @@ void pmu_exec_wakeup_hook_funs(u32 nDeviceIdMax)
 /*
 return: TRUE: time1 > time2
 */
-static int freertos_systick_check(u32 time1, u32 time2)
+static int tizenrt_systick_check(u32 time1, u32 time2)
 {
 	u32 delta = time1 > time2 ? time1 - time2 : time2 - time1;
 	if (delta < SYSTICK_THRES) {
@@ -100,9 +100,13 @@ uint32_t pmu_set_sysactive_time(uint32_t timeout)
 	}
 	sysactive_timeout_temp = 0;
 
+#ifndef CONFIG_PLATFORM_TIZENRT_OS
 	TimeOut = xTaskGetTickCount() + timeout;
+#else
+	TimeOut = TICK2MSEC(clock_systimer()) + timeout;
+#endif
 
-	if (freertos_systick_check(TimeOut, sleepwakelock_timeout)) {
+	if (tizenrt_systick_check(TimeOut, sleepwakelock_timeout)) {
 		sleepwakelock_timeout = TimeOut;
 	}
 
@@ -171,12 +175,16 @@ u32 ap_status_on(void)
  *           false : System keep awake.
  **/
 CONFIG_FW_CRITICAL_CODE_SECTION
-int freertos_ready_to_sleep(void)
+int tizenrt_ready_to_sleep(void)
 {
+#ifndef CONFIG_PLATFORM_TIZENRT_OS
 	u32 current_tick = xTaskGetTickCount();
+#else
+	u32 current_tick = TICK2MSEC(clock_systimer());
+#endif
 
 	/* timeout */
-	if (freertos_systick_check(current_tick, sleepwakelock_timeout) == FALSE) {
+	if (tizenrt_systick_check(current_tick, sleepwakelock_timeout) == FALSE) {
 		return FALSE;
 	}
 
@@ -201,15 +209,19 @@ int freertos_ready_to_sleep(void)
 }
 
 /*
- *  It is called in freertos pre_sleep_processing.
+ *  It is called in tizenrt pre_sleep_processing.
  *
  *  @return  true  : System is ready to check conditions that if it can enter dsleep.
  *           false : System can't enter deep sleep.
  **/
 CONFIG_FW_CRITICAL_CODE_SECTION
-int freertos_ready_to_dsleep(void)
+int tizenrt_ready_to_dsleep(void)
 {
+#ifndef CONFIG_PLATFORM_TIZENRT_OS
 	u32 current_tick = xTaskGetTickCount();
+#else
+	u32 current_tick = TICK2MSEC(clock_systimer());
+#endif
 
 	/* timeout */
 	if (current_tick < deepwakelock_timeout) {
@@ -224,11 +236,11 @@ int freertos_ready_to_dsleep(void)
 }
 
 /*
- *  It is called when freertos is going to sleep.
- *  At this moment, all sleep conditons are satisfied. All freertos' sleep pre-processing are done.
+ *  It is called when tizenrt is going to sleep.
+ *  At this moment, all sleep conditons are satisfied. All tizenrt' sleep pre-processing are done.
  *
- *  @param  expected_idle_time : The time that FreeRTOS expect to sleep.
- *                               If we set this value to 0 then FreeRTOS will do nothing in its sleep function.
+ *  @param  expected_idle_time : The time that TizenRT expect to sleep.
+ *                               If we set this value to 0 then TizenRT will do nothing in its sleep function.
  **/
 #if defined (ARM_CORE_CM4)
 #if 0 //for longrun test
@@ -241,7 +253,7 @@ VOID pg_aontimer_int(u32 Data)
 }
 #endif
 
-void freertos_pre_sleep_processing(uint32_t *expected_idle_time)
+void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 {
 
 
@@ -249,7 +261,7 @@ void freertos_pre_sleep_processing(uint32_t *expected_idle_time)
 	uint32_t tick_passed;
 	volatile uint32_t ms_passed = 0;
 
-	if (freertos_ready_to_dsleep()) {
+	if (tizenrt_ready_to_dsleep()) {
 		sleep_param.sleep_time = 0;// do not wake on system schedule tick
 		sleep_param.dlps_enable = ENABLE;
 	} else {
@@ -311,13 +323,13 @@ void freertos_pre_sleep_processing(uint32_t *expected_idle_time)
 
 #elif defined (ARM_CORE_CA32)
 
-void freertos_pre_sleep_processing(uint32_t *expected_idle_time)
+void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 {
 	uint32_t tick_before_sleep;
 	uint32_t tick_passed;
 	volatile uint32_t ms_passed = 0;
 
-	if (freertos_ready_to_dsleep()) {
+	if (tizenrt_ready_to_dsleep()) {
 		sleep_param.sleep_time = 0;// do not wake on system schedule tick
 		sleep_param.dlps_enable = ENABLE;
 	} else {
@@ -369,7 +381,7 @@ void freertos_pre_sleep_processing(uint32_t *expected_idle_time)
 #else
 
 CONFIG_FW_CRITICAL_CODE_SECTION
-void freertos_pre_sleep_processing(uint32_t *expected_idle_time)
+void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 {
 
 #ifdef CONFIG_SOC_PS_MODULE
@@ -420,13 +432,13 @@ void freertos_pre_sleep_processing(uint32_t *expected_idle_time)
 	SOCPS_SWRLDO_Suspend(DISABLE);
 	//__asm volatile( "cpsie i" );
 #else
-	/*  If PS is not enabled, then use freertos sleep function */
+	/*  If PS is not enabled, then use tizenrt sleep function */
 #endif
 }
 #endif
 
 CONFIG_FW_CRITICAL_CODE_SECTION
-void freertos_post_sleep_processing(uint32_t *expected_idle_time)
+void tizenrt_post_sleep_processing(uint32_t *expected_idle_time)
 {
 #ifndef ARM_CORE_CA32
 #ifndef configSYSTICK_CLOCK_HZ
@@ -444,7 +456,7 @@ void freertos_post_sleep_processing(uint32_t *expected_idle_time)
 
 #ifndef ARM_CORE_CA32
 /* NVIC will power off under sleep power gating mode, so we can */
-/* not use systick like FreeRTOS default implementation */
+/* not use systick like TizenRT default implementation */
 CONFIG_FW_CRITICAL_CODE_SECTION
 void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime)
 {
@@ -468,7 +480,7 @@ void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime)
 	/* If a context switch is pending or a task is waiting for the scheduler
 	to be unsuspended then abandon the low power entry. */
 	if (eSleepStatus == eAbortSleep) {
-	} else if (freertos_ready_to_sleep()) {
+	} else if (tizenrt_ready_to_sleep()) {
 		/* Sleep until something happens.  configPRE_SLEEP_PROCESSING() can
 		set its parameter to 0 to indicate that its implementation contains
 		its own wait for interrupt or wait for event instruction, and so wfi
@@ -546,7 +558,7 @@ void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime)
 		to be unsuspended then abandon the low power entry. */
 		if (eSleepStatus == eAbortSleep) {
 			arm_arch_timer_int_mask(pdFALSE);
-		} else if (freertos_ready_to_sleep()) {
+		} else if (tizenrt_ready_to_sleep()) {
 
 			//HAL_WRITE32(SYSTEM_CTRL_BASE_LP, REG_AON_AON_BACKUP2, 0);
 			/* Sleep until something happens.  configPRE_SLEEP_PROCESSING() can
@@ -610,7 +622,7 @@ EXIT:
 		portENABLE_INTERRUPTS();
 	} else if (portGET_CORE_ID() == 1) {
 		if (pmu_get_sleep_type() == SLEEP_PG) {
-			if (freertos_ready_to_sleep()) {
+			if (tizenrt_ready_to_sleep()) {
 				/* CPU1 will enter hotplug state. Raise a task yield to migrate its task */
 				pmu_set_secondary_cpu_state(1, CPU1_HOTPLUG);
 				portYIELD();
@@ -629,7 +641,7 @@ EXIT:
 }
 #endif
 #endif
-/* -------- FreeRTOS macro implementation -------- */
+/* -------- TizenRT macro implementation -------- */
 
 void pmu_acquire_wakelock(uint32_t nDeviceId)
 {
@@ -697,8 +709,11 @@ void pmu_set_dsleep_active_time(uint32_t TimeOutMs)
 {
 	u32 timeout = 0;
 
-
+#ifndef CONFIG_PLATFORM_TIZENRT_OS
 	timeout = xTaskGetTickCount() + TimeOutMs;
+#else
+	timeout = TICK2MSEC(clock_systimer()) + TimeOutMs;
+#endif
 	//DBG_8195A("pmu_set_dsleep_active_time: %d %d\n", timeout, deepwakelock_timeout);
 
 	if (timeout > deepwakelock_timeout) {

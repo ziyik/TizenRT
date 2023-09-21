@@ -1,5 +1,5 @@
-#ifndef _FREERTOS_PMU_8721D_H_
-#define _FREERTOS_PMU_8721D_H_
+#ifndef _TIZENRT_PMU_8721D_H_
+#define _TIZERNT_PMU_8721D_H_
 
 typedef enum {
 	PMU_OS					= 0,
@@ -84,10 +84,10 @@ void pmu_register_sleep_callback(u32 nDeviceId, PSM_HOOK_FUN sleep_hook_fun, voi
 								 PSM_HOOK_FUN wakeup_hook_fun, void *wakeup_param_ptr);
 void pmu_unregister_sleep_callback(u32 nDeviceId);
 
-int freertos_ready_to_sleep(void);
-int freertos_ready_to_dsleep(void);
-void freertos_pre_sleep_processing(uint32_t *expected_idle_time);
-void freertos_post_sleep_processing(uint32_t *expected_idle_time);
+int tizenrt_ready_to_sleep(void);
+int tizenrt_ready_to_dsleep(void);
+void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time);
+void tizenrt_post_sleep_processing(uint32_t *expected_idle_time);
 
 void pmu_acquire_wakelock(uint32_t nDeviceId);
 void pmu_release_wakelock(uint32_t nDeviceId);
