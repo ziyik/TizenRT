@@ -116,10 +116,17 @@ static uint32_t rtk_bt_wake_host_irq_handler(void *data)
 }
 
 #ifdef CONFIG_PM
-static struct pm_callback_s g_blecb = {
-	.notify  = up_pm_notify,
-	.prepare = up_pm_prepare,
-};
+static struct
+{
+	struct pm_callback_s pm_cb;
+} g_blepm =
+	{
+		.pm_cb.name = "rtl8730e_ble",
+		.pm_cb.notify  = amebasmart_ble_pmnotify,
+		.pm_cb.prepare = amebasmart_ble_pmprepare,
+	};
+#endif
+
 
 /****************************************************************************
  * Name: up_pm_notify
@@ -226,7 +233,7 @@ void rtk_bt_power_save_init(void)
 
 	InterruptRegister((IRQ_FUN)rtk_bt_wake_host_irq_handler, BT_WAKE_HOST_IRQ, NULL, INT_PRI_LOWEST);
 
-	DEBUGVERIFY(pm_register(&g_blecb) == OK);
+	DEBUGVERIFY(pm_register(&g_blepm.pm_cb) == OK);
 #endif
 }
 
