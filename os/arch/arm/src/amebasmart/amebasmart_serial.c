@@ -1186,9 +1186,9 @@ static bool rtl8730e_up_txempty(struct uart_dev_s *dev)
 static void amebasmart_serial_pmnotify(FAR struct pm_callback_s *cb, int domain,
                                    enum pm_state_e pmstate)
 {
-	switch (pmstate):
+	switch (pmstate)
 	{
-		case PM_NORMAL;
+		case PM_NORMAL:
 		case PM_IDLE:
 		case PM_STANDBY:
 		case PM_SLEEP:
@@ -1237,9 +1237,9 @@ static void amebasmart_serial_pmnotify(FAR struct pm_callback_s *cb, int domain,
 static int amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
                                    enum pm_state_e pmstate)
 {
-	switch (pmstate):
+	switch (pmstate)
 	{
-		case PM_NORMAL;
+		case PM_NORMAL:
 		case PM_IDLE:
 		case PM_STANDBY:
 		case PM_SLEEP:
