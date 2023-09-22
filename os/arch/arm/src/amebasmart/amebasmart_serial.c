@@ -522,7 +522,7 @@ static struct
 	bool serial_suspended;
 } g_serialpm =
 	{
-		.pm_cb.name = "serial",
+		.pm_cb.name = "rtl8730e_serial",
 		.pm_cb.notify  = amebasmart_serial_pmnotify,
 		.pm_cb.prepare = amebasmart_serial_pmprepare,
 		.serial_suspended = false
@@ -1234,7 +1234,7 @@ static void amebasmart_serial_pmnotify(FAR struct pm_callback_s *cb, int domain,
  ****************************************************************************/
 
 #ifdef CONFIG_PM
-static int stm32l4serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
+static int amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
                                    enum pm_state_e pmstate)
 {
 	switch (pmstate):
