@@ -74,10 +74,6 @@ static void up_idlepm(void)
 	{
 		//TODO: Critical section code needed for SMP case?
 		//Any additional implications of putting a core in critical section while trying to sleep?
-#if ( configNUM_CORES > 1 )
-		flags = irqsave();
-#endif
-
 		/* Perform board-specific, state-dependent logic here */
 	  	printf("newstate= %d oldstate=%d\n", newstate, oldstate);
 
@@ -119,7 +115,7 @@ static void up_idlepm(void)
 							/* CPU1 is in task schedular, tell CPU1 to enter hotplug */
 							if (pmu_get_secondary_cpu_state(1) == CPU1_RUNNING) {
 								/* CPU1 may in WFI idle state. Wake it up to enter hotplug itself */
-								portENABLE_INTERRUPTS();
+								up_enable_irq();
 								arm_gic_raise_softirq(1, 0);
 								arm_arch_timer_int_mask(0);
 								DelayUs(100);
@@ -162,7 +158,7 @@ EXIT:
 							/* CPU1 will enter hotplug state. Raise a task yield to migrate its task */
 							pmu_set_secondary_cpu_state(1, CPU1_HOTPLUG);
 							// Check portYIELD();
-							// portYIELD();
+							portYIELD();
 						}
 					}
 

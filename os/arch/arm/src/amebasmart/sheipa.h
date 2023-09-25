@@ -7,6 +7,7 @@
 #ifndef SHEIPA_H
 #define SHEIPA_H
 
+#ifndef CONFIG_PLATFORM_TIZENRT_OS
 #if CONFIG_GIC_VER <= 2
 #define CONFIG_GIC_V2
 #define GIC_DIST_BASE			0xA0101000
@@ -15,12 +16,9 @@
 #define GIC_DIST_BASE			0x02100000
 #define GIC_RDIST_BASE			0x02140000
 #endif
-
-#ifndef CONFIG_PLATFORM_TIZENRT_OS
 #include "FreeRTOS.h"
+#include "arm_gic.h"
 #endif
-// #include "debug_printf.h"
-// #include "arm_gic.h"
 #include "arch_timer.h"
 #include "spinlock.h"
 #include "psci.h"

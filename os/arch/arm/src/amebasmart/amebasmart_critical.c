@@ -22,6 +22,7 @@
  * Included Files
  ****************************************************************************/
 #include "amebasmart_critical.h"
+#include "spinlock.h"
 
 /****************************************************************************
  * Definitions
@@ -36,6 +37,27 @@ mode. */
 /* The value of the mode bits in the APSR when the CPU is executing in user
 mode. */
 #define portAPSR_IRQ_MODE				( 0x12 )
+
+/* Counts the interrupt nesting depth.  A context switch is only performed if
+if the nesting depth is 0. */
+volatile uint32_t ulPortInterruptNesting[ configNUM_CORES ] = { 0 };
+
+/* Used for smp  */
+spinlock_t task_lock;
+
+/*-----------------------------------------------------------*/
+
+void xPortSpinLockTask( void )
+{
+	// spin_lock(&task_lock);
+}
+/*-----------------------------------------------------------*/
+
+void xPortSpinUnLockTask( void )
+{
+	// spin_unlock(&task_lock);
+}
+/*-----------------------------------------------------------*/
 
 uint32_t ulPortInterruptLock(void)
 {
@@ -61,6 +83,6 @@ BaseType_t xPortCpuIsInInterrupt(void)
 
 	__asm volatile (	"mrs	%0, cpsr	\n" : "=r" (cpsr));
 
-	return ((cpsr & portAPSR_MODE_BITS_MASK) == portAPSR_IRQ_MODE) || ulPortInterruptNesting[portGET_CORE_ID()];
+	return ((cpsr & portAPSR_MODE_BITS_MASK) == portAPSR_IRQ_MODE) || ulPortInterruptNesting[up_cpu_index()];
 }
 #endif

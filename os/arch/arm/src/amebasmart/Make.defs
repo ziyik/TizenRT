@@ -251,6 +251,9 @@ ifeq ($(CONFIG_PM),y)
   #CMN_CSRCS += psci.c ameba_pmc.c
   #CMN_ASRCS += a32_pm.S
 endif
+ifeq ($(CONFIG_SMP),y)
+  #CMN_CSRCS += smp.c
+endif
 ifeq ($(CONFIG_AMEBASMART_TRUSTZONE),y)
 #CHIP_CSRCS += amebasmart_nsc.c
 
