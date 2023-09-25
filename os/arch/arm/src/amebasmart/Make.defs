@@ -191,11 +191,6 @@ ifeq ($(CONFIG_SMP),y)
   CMN_CSRCS += arm_scu.c
 endif
 
-ifeq ($(CONFIG_PM),y)
-  CMN_CSRCS += psci.c ameba_pmc.c
-  CMN_ASRCS += a32_pm.S
-endif
-
 ARCH_SRCDIR = $(TOPDIR)/arch/$(CONFIG_ARCH)/src/
 
 CFLAGS += -I$(TOPDIR)/board/$(CONFIG_ARCH_BOARD)/src/component/soc/amebad2/fwlib/include
@@ -226,6 +221,7 @@ CHIP_CSRCS = amebasmart_boot.c
 CHIP_CSRCS += amebasmart_idle.c
 CHIP_CSRCS += amebasmart_irq.c
 CHIP_CSRCS += amebasmart_clockconfig.c
+CHIP_CSRCS += amebasmart_critical.c
 CHIP_CSRCS += amebasmart_cpuboot.c
 CHIP_CSRCS += amebasmart_memorymap.c
 CHIP_CSRCS += amebasmart_serial.c
@@ -251,7 +247,10 @@ endif
 ifeq ($(CONFIG_BINARY_SIGNING),y)
 #CMN_CSRCS += amebasmart_signature.c
 endif
-
+ifeq ($(CONFIG_PM),y)
+  #CMN_CSRCS += psci.c ameba_pmc.c
+  #CMN_ASRCS += a32_pm.S
+endif
 ifeq ($(CONFIG_AMEBASMART_TRUSTZONE),y)
 #CHIP_CSRCS += amebasmart_nsc.c
 

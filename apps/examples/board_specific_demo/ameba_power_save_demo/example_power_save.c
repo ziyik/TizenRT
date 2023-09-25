@@ -29,40 +29,40 @@
 #include <semaphore.h>
 
 
-#include "serial_api.h"
-#include "uart_ext.h"
+// #include "serial_api.h"
+// #include "uart_ext.h"
 
-#define UART_IDX	0
-#define UART_BAUD	38400
+// #define UART_IDX	0
+// #define UART_BAUD	38400
 
-volatile char rc = 0;
+// volatile char rc = 0;
 
-void uart_send_string(serial_t *sobj, char *pstr)
-{
-	unsigned int i = 0;
-	while (*(pstr + i) != 0) {
-		serial_putc(sobj, *(pstr + i));
-		i++;
-	}
-}
+// void uart_send_string(serial_t *sobj, char *pstr)
+// {
+// 	unsigned int i = 0;
+// 	while (*(pstr + i) != 0) {
+// 		serial_putc(sobj, *(pstr + i));
+// 		i++;
+// 	}
+// }
 
-void uart_irq(uint32_t id, SerialIrq event)
-{
-	serial_t *sobj = (void *)id;
+// void uart_irq(uint32_t id, SerialIrq event)
+// {
+// 	serial_t *sobj = (void *)id;
 
-	if (event == RxIrq) {
-		while (serial_readable(sobj)) {
-			rc = serial_getc(sobj);
-			serial_putc(sobj, rc);
-			printf("serial_putc\n");
-		}
-	}
+// 	if (event == RxIrq) {
+// 		while (serial_readable(sobj)) {
+// 			rc = serial_getc(sobj);
+// 			serial_putc(sobj, rc);
+// 			printf("serial_putc\n");
+// 		}
+// 	}
 
-	if (event == TxIrq && rc != 0) {
-		rc = 0;
-	}
+// 	if (event == TxIrq && rc != 0) {
+// 		rc = 0;
+// 	}
 
-}
+// }
 
 #ifdef CONFIG_BUILD_KERNEL
 int main(int argc, FAR char *argv[])
@@ -70,24 +70,24 @@ int main(int argc, FAR char *argv[])
 int powersave_main(int argc, char *argv[])
 #endif
 {
-	serial_t sobj;
-	printf("uart_irq_demo\n");
-	printf("uart_irq_demo\n");
-	sobj.uart_idx = UART_IDX;
+// 	serial_t sobj;
+// 	printf("uart_irq_demo\n");
+// 	printf("uart_irq_demo\n");
+// 	sobj.uart_idx = UART_IDX;
 
-	serial_init(&sobj, UART_TX, UART_RX);
-	serial_baud(&sobj, UART_BAUD);
-	serial_format(&sobj, 8, ParityNone, 1);
+// 	serial_init(&sobj, UART_TX, UART_RX);
+// 	serial_baud(&sobj, UART_BAUD);
+// 	serial_format(&sobj, 8, ParityNone, 1);
 
-	uart_send_string(&sobj, "UART IRQ API Demo...\r\n");
-	uart_send_string(&sobj, "Hello World!!!\r\n");
-	serial_irq_handler(&sobj, uart_irq, (uint32_t)&sobj);
-	serial_irq_set(&sobj, RxIrq, 1);
-	serial_irq_set(&sobj, TxIrq, 1);
+// 	uart_send_string(&sobj, "UART IRQ API Demo...\r\n");
+// 	uart_send_string(&sobj, "Hello World!!!\r\n");
+// 	serial_irq_handler(&sobj, uart_irq, (uint32_t)&sobj);
+// 	serial_irq_set(&sobj, RxIrq, 1);
+// 	serial_irq_set(&sobj, TxIrq, 1);
 
-	//while (1);
-printf("end uart_irq_demo\n");
-	vTaskDelete(NULL);
-	return 0;
+// 	//while (1);
+// printf("end uart_irq_demo\n");
+// 	vTaskDelete(NULL);
+// 	return 0;
 
 }

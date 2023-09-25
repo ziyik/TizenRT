@@ -1241,6 +1241,7 @@ static int amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
 	{
 		case PM_NORMAL:
 		case PM_IDLE:
+			break;
 		case PM_STANDBY:
 		case PM_SLEEP:
 		default:

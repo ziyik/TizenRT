@@ -201,11 +201,13 @@ int tizenrt_ready_to_sleep(void)
 	}
 #endif
 
+#ifndef CONFIG_PLATFORM_TIZENRT_OS
 	if (wakelock == 0) {
 		return TRUE;
 	} else {
 		return FALSE;
 	}
+#endif
 }
 
 /*
@@ -242,7 +244,6 @@ int tizenrt_ready_to_dsleep(void)
  *  @param  expected_idle_time : The time that TizenRT expect to sleep.
  *                               If we set this value to 0 then TizenRT will do nothing in its sleep function.
  **/
-#if defined (ARM_CORE_CM4)
 #if 0 //for longrun test
 VOID pg_aontimer_int(u32 Data)
 {
@@ -252,76 +253,6 @@ VOID pg_aontimer_int(u32 Data)
 	RCC_PeriphClockCmd(APBPeriph_ATIM, APBPeriph_ATIM_CLOCK, DISABLE);
 }
 #endif
-
-void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
-{
-
-
-	uint32_t tick_before_sleep;
-	uint32_t tick_passed;
-	volatile uint32_t ms_passed = 0;
-
-	if (tizenrt_ready_to_dsleep()) {
-		sleep_param.sleep_time = 0;// do not wake on system schedule tick
-		sleep_param.dlps_enable = ENABLE;
-	} else {
-		sleep_param.sleep_time = max_sleep_time;//*expected_idle_time;
-		max_sleep_time = 0;
-		sleep_param.dlps_enable = DISABLE;
-	}
-	sleep_param.sleep_type = sleep_type;
-
-	*expected_idle_time = 0;
-
-	/*  Store gtimer timestamp before sleep */
-	tick_before_sleep = SYSTIMER_TickGet();
-	sysactive_timeout_flag = 1;
-#ifdef AMEBAD2_TODO
-	IPCM0_DEV->IPCx_USR[IPC_INT_CHAN_SHELL_SWITCH] = 0x00000000;
-#endif
-
-	//BKUP_Set(BKUP_REG0, BIT_KM4_WAKE_DELAY);
-	/* for test */
-#if 0
-	RCC_PeriphClockCmd(APBPeriph_ATIM, APBPeriph_ATIM_CLOCK, ENABLE);
-	u32 tmp = rand();
-	SOCPS_AONTimer(tmp % 800 + 50);
-	SOCPS_AONTimerINT_EN(ENABLE);
-	InterruptRegister(pg_aontimer_int, AON_TIM_IRQ, NULL, 7);
-	InterruptEn(AON_TIM_IRQ, 7);
-	SOCPS_SetNPWakeEvent_MSK0_HP(WAKE_SRC_AON_TIM, ENABLE);
-#endif
-
-	if (sleep_type == SLEEP_PG) {
-		SOCPS_SleepPG();
-	} else {
-		SOCPS_SleepCG();
-	}
-
-	//pmu_set_sysactive_time(5);
-	//BKUP_Clear(BKUP_REG0, BIT_KM4_WAKE_DELAY);
-
-	/*  update kernel tick by calculating passed tick from gtimer */
-	/*  get current gtimer timestamp */
-	tick_passed = SYSTIMER_GetPassTick(tick_before_sleep);
-
-	tick_passed += missing_tick;
-	missing_tick = tick_passed & 0x1F;
-
-	/* ms =x*1000/32768 = (x *1000) >>15 */
-	ms_passed = (u32)((((u64)tick_passed) * 1000) >> 15);
-
-	vTaskStepTick(ms_passed); /*  update kernel tick */
-
-	sysactive_timeout_flag = 0;
-	pmu_set_sysactive_time(2);
-
-	if (tickless_debug) {
-		DBG_8195A("np sleeped:[%d] ms\n", ms_passed);
-	}
-}
-
-#elif defined (CONFIG_ARCH_CORTEXA32)
 
 void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 {
@@ -366,7 +297,11 @@ void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 	/* ms =x*1000/32768 = (x *1000) >>15 */
 	ms_passed = (u32)((((u64)tick_passed) * 1000) >> 15);
 
+#ifndef CONFIG_PLATFORM_TIZENRT_OS
 	vTaskStepTick(ms_passed); /*  update kernel tick */
+#else
+	g_system_timer += ms_passed;
+#endif
 
 	sysactive_timeout_flag = 0;
 
@@ -378,64 +313,6 @@ void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 		DBG_8195A("ap sleeped:[%d] ms\n", ms_passed);
 	}
 }
-#else
-
-CONFIG_FW_CRITICAL_CODE_SECTION
-void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
-{
-
-#ifdef CONFIG_SOC_PS_MODULE
-	uint32_t tick_before_sleep;
-	uint32_t tick_passed;
-	volatile uint32_t ms_passed = 0;
-	*expected_idle_time = 0;
-
-	/*  Store gtimer timestamp before sleep */
-	tick_before_sleep = SYSTIMER_TickGet();
-	sysactive_timeout_flag = 1;
-
-	/* some function call like xTaskGetTickCount may cause IRQ ON, */
-	/* so we close IRQ again here to avoid sys irq when enter or exit sleep */
-	//__asm volatile( "cpsid i" );
-
-	SOCPS_SWRLDO_Suspend(ENABLE);
-
-	/* make sure the following function dont call system API that may open IRQ */
-
-	SOCPS_SleepInit();
-
-	if (sleep_type == SLEEP_PG) {
-		SOCPS_SleepPG();
-	} else {
-		SOCPS_SleepCG();
-	}
-
-	/*  update kernel tick by calculating passed tick from gtimer */
-	/*  get current gtimer timestamp */
-	tick_passed = SYSTIMER_GetPassTick(tick_before_sleep);
-
-	tick_passed += missing_tick;
-	missing_tick = tick_passed & 0x1F;
-
-	/* timer clock is 32768, 0x20 is 1ms */
-	ms_passed = (((tick_passed & 0xFFFF8000) >> 15) * 1000) + (((tick_passed & 0x7FFF) * 1000) >> 15);
-
-	vTaskStepTick(ms_passed); /*  update kernel tick */
-
-	if (ps_config.km0_tickles_debug) {
-		DBG_8195A("km0 sleeped:[%d] ms\n", ms_passed);
-	}
-
-	sysactive_timeout_flag = 0;
-	sleepwakelock_timeout = xTaskGetTickCount() + 1;
-
-	SOCPS_SWRLDO_Suspend(DISABLE);
-	//__asm volatile( "cpsie i" );
-#else
-	/*  If PS is not enabled, then use tizenrt sleep function */
-#endif
-}
-#endif
 
 CONFIG_FW_CRITICAL_CODE_SECTION
 void tizenrt_post_sleep_processing(uint32_t *expected_idle_time)
@@ -454,69 +331,6 @@ void tizenrt_post_sleep_processing(uint32_t *expected_idle_time)
 
 }
 
-#ifndef CONFIG_ARCH_CORTEXA32
-/* NVIC will power off under sleep power gating mode, so we can */
-/* not use systick like TizenRT default implementation */
-CONFIG_FW_CRITICAL_CODE_SECTION
-void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime)
-{
-	uint32_t xModifiableIdleTime;
-	eSleepModeStatus eSleepStatus;
-
-	system_can_yield = 0;
-
-	SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
-
-	/* Enter a critical section but don't use the taskENTER_CRITICAL()
-	method as that will mask interrupts that should exit sleep mode. */
-#if defined (ARM_CORE_CM0)
-	taskENTER_CRITICAL();
-#else
-	__asm volatile("cpsid i");
-#endif
-
-	eSleepStatus = eTaskConfirmSleepModeStatus();
-
-	/* If a context switch is pending or a task is waiting for the scheduler
-	to be unsuspended then abandon the low power entry. */
-	if (eSleepStatus == eAbortSleep) {
-	} else if (tizenrt_ready_to_sleep()) {
-		/* Sleep until something happens.  configPRE_SLEEP_PROCESSING() can
-		set its parameter to 0 to indicate that its implementation contains
-		its own wait for interrupt or wait for event instruction, and so wfi
-		should not be executed again.  However, the original expected idle
-		time variable must remain unmodified, so a copy is taken. */
-		xModifiableIdleTime = (uint32_t)xExpectedIdleTime;
-		configPRE_SLEEP_PROCESSING(xModifiableIdleTime);
-		if (xModifiableIdleTime > 0) {
-			__asm volatile("dsb");
-			__asm volatile("wfi");
-			__asm volatile("isb");
-		}
-		configPOST_SLEEP_PROCESSING(xModifiableIdleTime);
-	}
-#if defined (ARM_CORE_CM4)
-	else {
-		SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
-		__asm volatile("dsb");
-		__asm volatile("wfi");
-		__asm volatile("nop");   //fix cpu fused instruction issue
-		__asm volatile("isb");
-	}
-#endif
-	/* Re-enable interrupts - see comments above the cpsid instruction()
-	above. */
-#if defined (ARM_CORE_CM0)
-	taskEXIT_CRITICAL();
-#else
-	__asm volatile("cpsie i");
-#endif
-
-	SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
-
-	system_can_yield = 1;
-}
-#else
 u32 check_wfi_state(u8 core_id)
 {
 	CA32_TypeDef *ca32 = CA32_BASE;
@@ -533,7 +347,8 @@ u32 check_wfi_state(u8 core_id)
 	}
 }
 
-#if !defined(CONFIG_PLATFORM_TIZENRT_OS)
+//Breakdown and move to amebasmart_idle.c
+#ifndef CONFIG_PLATFORM_TIZENRT_OS
 void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime)
 {
 	uint32_t xModifiableIdleTime;
@@ -542,7 +357,7 @@ void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime)
 	/* need further check*/
 	system_can_yield = 0;
 
-	if (portGET_CORE_ID() == 0) {
+	if (up_cpu_index() == 0) {
 		/* mask sys tick interrupt*/
 		arm_arch_timer_int_mask(pdTRUE);
 
@@ -642,7 +457,7 @@ EXIT:
 	system_can_yield = 1;
 }
 #endif
-#endif
+
 /* -------- TizenRT macro implementation -------- */
 
 void pmu_acquire_wakelock(uint32_t nDeviceId)

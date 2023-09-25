@@ -3,10 +3,12 @@
 #include <task.h>
 #include "freertos_pmu.h"
 #endif
-#include "platform_autoconf.h"
-#include "ameba_tizenrt_pmu.h"
+// #include "platform_autoconf.h"
+// #include "ameba_tizenrt_pmu.h"
+#include "sheipa.h"
 #include "ameba_soc.h"
 #include "sys_io.h"
+#include "gic.h"
 
 
 #define ROUND_UP(divider, divisor) (divider%divisor) ? ((divider/divisor)+1) : (divider/divisor)

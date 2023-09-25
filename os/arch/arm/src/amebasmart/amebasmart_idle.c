@@ -24,15 +24,18 @@
 
 #include <tinyara/config.h>
 
-#include <tinyara/arch.h>
-#include "arm_internal.h"
+// #include <tinyara/arch.h>
+#include "../../include/armv7-a/irq.h"
+// #include "arm_internal.h"
 
 #ifdef CONFIG_PM
 #include <tinyara/pm/pm.h>
 //For reference to up_rtc_gettime() and up_rtc_time()
-#include "amebasmart_rtc.h"
+// #include "amebasmart_rtc.h"
+#include "ameba_soc.h"
 #endif
 
+static u32 system_can_yield = 1; 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -63,11 +66,6 @@ static void up_idlepm(void)
 	irqstate_t flags;
 	int ret;
 
-#ifdef CONFIG_RTC
-	clock_t time_intval;
-	struct tm tp1, tp2;
-#endif
-
 	/* Decide, which power saving level can be obtained */
 	newstate = pm_checkstate(PM_IDLE_DOMAIN);
 
@@ -76,10 +74,12 @@ static void up_idlepm(void)
 	{
 		//TODO: Critical section code needed for SMP case?
 		//Any additional implications of putting a core in critical section while trying to sleep?
+#if ( configNUM_CORES > 1 )
 		flags = irqsave();
+#endif
 
 		/* Perform board-specific, state-dependent logic here */
-	printf("newstate= %d oldstate=%d\n", newstate, oldstate);
+	  	printf("newstate= %d oldstate=%d\n", newstate, oldstate);
 
 		/* Then force the global state change */
 
@@ -95,98 +95,101 @@ static void up_idlepm(void)
 		/* MCU-specific power management logic */
 		switch (newstate) {
 			case PM_NORMAL:
-				break;
-
 			case PM_IDLE:
 				break;
-
 			case PM_STANDBY:
-#ifdef CONFIG_SCHED_TICKSUPPRESS
-#ifdef CONFIG_RTC
-				/* Note RTC time before sleep */
-#ifdef CONFIG_RTC_HIRES
-				//TODO: HIRES timer function also returns with a precision of seconds only?
-				ret = up_rtc_gettime(&tp1);
-#elif CONFIG_RTC_DRIVER
-				//TODO: up_rtc_time() is a dummy function, so how to handle RTC time requests wihtout HIRES?
-				ret = up_rtc_time();
-#else
-				//TODO: What if neither is available?
-#endif
-#endif	/* CONFIG_RTC */
-				//TODO: -PENDING- Supress ticks function implementation, if desired, required from Realtek. Refer arch/arm/src/stm32l4/stm32l4_ticksuppress.c
-				/* Disable tick interrupts */
-				//supress_ticks();
-
-				/* Set waketime interrupt for tickless idle  */
-				set_waketime_interrupt();
-
-				/* Enter sleep mode */
-				//TODO: -PENDING- Put Amebasmart into sleep mode
-				//stm32l4_pmsleep(false);
-
-#ifdef CONFIG_RTC
-				/* Read RTC time after wakeup */
-#ifdef CONFIG_RTC_HIRES
-				//TODO: HIRES timer function also returns with a precision of seconds only?
-				ret = up_rtc_gettime(&tp2);
-				time_intval = SEC2TICK(mktime(&tp2) - mktime(&tp1));
-#elif CONFIG_RTC_DRIVER
-				//TODO: up_rtc_time() is a dummy function, so how to handle RTC time requests wihtout HIRES?
-				ret = up_rtc_time();
-				time_intval = -1;
-#else
-				//TODO: What if neither is available?
-				time_intval = -1;
-#endif
-				/* Update ticks */
-				g_system_timer +=  time_intval;
-				uwTick += TICK2MSEC(time_intval);
-				/* Execute waketime interrupt */
-				execute_waketime_interrupt(time_intval);
-#endif
-				//TODO: -PENDING- Implemented along with suppress_ticks()
-				/* Enable tick interrupts */
-				//enable_ticks();
-
-				/* We dont want state change directly
-				* it is the resposibility of the scheduled
-				* event to inform the PM Core about the
-				* pm activity based on its requirement */
-				//oldstate = PM_IDLE; -> Re visit
-#else
-				//TODO: -PENDING- Amebasmart function to put to sleep, without supressing ticks
-				//stm32l4_pmsleep(false);
-#endif	/* CONFIG_SCHED_TICKSUPPRESS */
 				break;
-
 			case PM_SLEEP:
-				//TODO: Revisit and check if something like this is required in Amebasmart
-				// Refer to set_exti_button() function in arch/arm/src/stm32l4/stm32l4_idle.c
-				/* Set EXTI interrupt */
-				//set_exti_button();
+				/* need further check*/
+				system_can_yield = 0;
+				if (up_cpu_index() == 0) {
+					/* mask sys tick interrupt*/
+					arm_arch_timer_int_mask(1);
+					flags = irqsave();
+					if (tizenrt_ready_to_sleep()) {
+// Consider for dual core condition
+#if ( configNUM_CORES > 1 )
+						/*PG flow */
+						if (pmu_get_sleep_type() == SLEEP_PG) {
+							/* CPU1 just come back from pg, so can't sleep here */
+							if (pmu_get_secondary_cpu_state(1) == CPU1_WAKE_FROM_PG) {
+								goto EXIT;
+							}
 
-				//TODO: -PENDING- Amebasmart function to enter STOP mode, refer arch/arm/src/stm32l4/stm32l4_pmstop.c
-				//(void)stm32l4_pmstop2();
+							/* CPU1 is in task schedular, tell CPU1 to enter hotplug */
+							if (pmu_get_secondary_cpu_state(1) == CPU1_RUNNING) {
+								/* CPU1 may in WFI idle state. Wake it up to enter hotplug itself */
+								portENABLE_INTERRUPTS();
+								arm_gic_raise_softirq(1, 0);
+								arm_arch_timer_int_mask(0);
+								DelayUs(100);
+								goto EXIT;
+							}
+							/* CG flow */
+						} else {
+							if (!check_wfi_state(1)) {
+								goto EXIT;
+							}
+						}
+#endif
+						// Interrupt source from BT/UART will wake cpu up, just leave expected idle time as 0
+						// Enter sleep mode
+						configPRE_SLEEP_PROCESSING(0);
+						/* When wake from pg, arm timer has been reset, so a new compare value is necessary to
+						trigger an timer interrupt */
+						if (pmu_get_sleep_type() == SLEEP_PG) {
+							arm_arch_timer_set_compare(arm_arch_timer_count() + 50000);
+						}
+						arm_arch_timer_int_mask(0);
+						configPOST_SLEEP_PROCESSING(0);
+					}
+					else {
+						/* power saving when idle*/
+						arm_arch_timer_int_mask(0);
+						__asm(" DSB");
+						__asm(" WFI");
+						__asm(" ISB");
+					}
+#if ( configNUM_CORES > 1 )
+EXIT:
+#endif				
+					/* Re-enable interrupts and sys tick*/
+					up_enable_irq();
+				}
+				else if (up_cpu_index() == 1) {
+					if (pmu_get_sleep_type() == SLEEP_PG) {
+						if (tizenrt_ready_to_sleep()) {
+							/* CPU1 will enter hotplug state. Raise a task yield to migrate its task */
+							pmu_set_secondary_cpu_state(1, CPU1_HOTPLUG);
+							// Check portYIELD();
+							// portYIELD();
+						}
+					}
 
-				/* Re configure clocks */
-				//TODO: -PENDING- Amebasmart function to enable clock and re-configure.
-				//stm32l4_clockenable();
-
+					flags = irqsave();
+					__asm("	DSB");
+					__asm("	WFI");
+					__asm("	ISB");
+					up_enable_irq();
+				}
+				/* need further check*/
+				system_can_yield = 1;
+				// Switch status back to normal mode after wake up from interrupt
 				ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
 				if (ret < 0) {
 					oldstate = PM_NORMAL;
 				}
-				printf("Wakeup from STOP2!!\n");
+				printf("Wakeup from Sleep!!\n");
 				break;
 
 			default:
 				break;
 		}
-
 		//TODO: Handle critical section access logic for SMP case in 8730E?
 		//Is leave_critical_section required? In accordance with irqsave()^
-		irqrestore(flags);
+#if ( configNUM_CORES > 1 )
+		up_enable_irq();
+#endif
 	}
 }
 #else

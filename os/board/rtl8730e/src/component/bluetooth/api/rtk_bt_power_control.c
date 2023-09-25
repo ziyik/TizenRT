@@ -255,4 +255,4 @@ void rtk_bt_power_save_deinit(void)
 	rtk_bt_resume_callback = NULL;
 #endif
 }
-#endif
+// #endif
