@@ -44,6 +44,7 @@
 #include "amebasmart_memorymap.h"
 #include "amebasmart_boot.h"
 #include "sctlr.h"
+#include "psci.h"
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -410,6 +411,10 @@ void arm_boot(void)
   cp15_wrvbar((uint32_t)_vector_start);
   amebasmart_cpu_enable();
 
+  //psci need to be initiated if smp is not enabled
+#if ( configNUM_CORES == 1 )
+  psci_init();
+#endif
   // TBD: Complete the rest of the step in app_start, prvSetupHardware will be done in os_start()
   app_start();
 }

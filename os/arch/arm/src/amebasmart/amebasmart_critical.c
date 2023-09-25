@@ -49,13 +49,13 @@ spinlock_t task_lock;
 
 void xPortSpinLockTask( void )
 {
-	// spin_lock(&task_lock);
+	spin_lock(&task_lock);
 }
 /*-----------------------------------------------------------*/
 
 void xPortSpinUnLockTask( void )
 {
-	// spin_unlock(&task_lock);
+	spin_unlock(&task_lock);
 }
 /*-----------------------------------------------------------*/
 

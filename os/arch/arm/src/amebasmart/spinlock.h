@@ -50,6 +50,7 @@ static inline void spin_lock(spinlock_t *lock)
 	__asm__ __volatile__(
 		"1:	ldrex	%0, [%1]\n"
 		"	cmp		%0, #0\n"
+		"	ITEE ne\n"
 		"	wfene\n"
 		"	strexeq	%0, %2, [%1]\n"
 		"	cmpeq	%0, #0\n"
