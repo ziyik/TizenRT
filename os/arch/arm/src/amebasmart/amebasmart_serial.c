@@ -195,8 +195,12 @@
 #define CHAR_TIMEOUT 6540
 #define TX_FIFO_MAX 16
 
+/* Power management definitions */
+#if defined(CONFIG_PM) && !defined(CONFIG_RTL8730E_PM_SERIAL_ACTIVITY)
+#define CONFIG_RTL8730E_PM_SERIAL_ACTIVITY  10
+#endif
 #if defined(CONFIG_PM)
-#  define PM_IDLE_DOMAIN 0		/* Revisit */
+#define PM_IDLE_DOMAIN             0 /* Revisit */
 #endif
 
 /****************************************************************************
@@ -518,7 +522,6 @@ static uart_dev_t g_uart4port = {
 static struct
 {
 	struct pm_callback_s pm_cb;
-	//TODO: -PENDING- The boolean member below may not be needed, it is STM implementation specific
 	bool serial_suspended;
 } g_serialpm =
 	{
@@ -585,6 +588,11 @@ static void rtl8730e_log_up_shutdown(struct uart_dev_s *dev)
 
 static int rtl8730e_log_uart_irq(void *Data)
 {
+	/* Report serial activity to the power management logic */
+#if defined(CONFIG_PM) && CONFIG_RTL8730E_PM_SERIAL_ACTIVITY > 0
+	pm_activity(PM_IDLE_DOMAIN, CONFIG_RTL8730E_PM_SERIAL_ACTIVITY);
+#endif
+
 	uart_recvchars(&CONSOLE_DEV);
 	return 0;
 }
@@ -920,6 +928,12 @@ void rtl8730e_uart_irq(uint32_t id, SerialIrq event)
 {
 	struct uart_dev_s *dev = (struct uart_dev_s *)id;
 	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
+
+	/* Report serial activity to the power management logic */
+#if defined(CONFIG_PM) && CONFIG_RTL8730E_PM_SERIAL_ACTIVITY > 0
+	pm_activity(PM_IDLE_DOMAIN, CONFIG_RTL8730E_PM_SERIAL_ACTIVITY);
+#endif
+
 	if (event == RxIrq) {
 		uart_recvchars(dev);
 	}
@@ -1241,9 +1255,37 @@ static int amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
 	{
 		case PM_NORMAL:
 		case PM_IDLE:
-			break;
 		case PM_STANDBY:
+			break;
+
 		case PM_SLEEP:
+			/* UART0_DEV: hp uart0
+			 * UART1_DEV: hp uart1
+			 * UART2_DEV: hp uart2
+			 * UART3_DEV: hp uart3_bt
+			 * LOGUART_DEV: KM0 log uart */
+#ifdef CONFIG_RTL8730E_UART0
+			if ((g_uart0priv.txint_enable) && (!serial_writable(sdrv[0]))) {		/* If Tx init enable and FIFO not empty */
+					return ERROR;
+			}
+#endif
+#ifdef CONFIG_RTL8730E_UART1
+			if ((g_uart1priv.txint_enable) && (!serial_writable(sdrv[1]))) {		/* If Tx init enable and FIFO not empty */
+					return ERROR;
+			}
+#endif
+#ifdef CONFIG_RTL8730E_UART2
+			if ((g_uart2priv.txint_enable) && (!serial_writable(sdrv[2]))) {		/* If Tx init enable and FIFO not empty */
+					return ERROR;
+			}
+#endif
+#ifdef CONFIG_RTL8730E_UART4
+			LOGUART_TypeDef *UARTLOG = LOGUART_DEV;
+			if (!(UARTLOG->LOGUART_UART_LSR & LOG_UART_IDX_FLAG[2].empty)) {		/* log UART Tx Empty Check */
+				return ERROR;
+			}
+#endif
+			break;
 		default:
 			break;
 	}
@@ -1298,7 +1340,6 @@ void up_serialinit(void)
 
 #ifdef CONFIG_PM
 	/* Register to receive power management callbacks */
-
 	ret = pm_register(&g_serialpm.pm_cb);
 	DEBUGASSERT(ret == OK);
 	UNUSED(ret);

@@ -18,6 +18,14 @@
 #include "ameba_soc.h"
 #include "wifi_conf.h"
 
+/* Power management definitions */
+#if defined(CONFIG_PM) && !defined(CONFIG_RTL8730E_PM_BT_ACTIVITY)
+#define CONFIG_RTL8730E_PM_BT_ACTIVITY  10
+#endif
+#if defined(CONFIG_PM)
+#define PM_IDLE_DOMAIN             0 /* Revisit */
+#endif
+
 rtk_bt_ps_callback rtk_bt_suspend_callback = NULL;
 rtk_bt_ps_callback rtk_bt_resume_callback = NULL;
 
@@ -29,6 +37,11 @@ static void bt_power_suspend_callback(void)
 static void bt_power_resume_callback(void)
 {
 	printf("[BT_PS] BT is wake now\r\n");
+
+	/* Report BT activity to the power management logic */
+#if defined(CONFIG_PM) && CONFIG_RTL8730E_PM_BT_ACTIVITY > 0
+	pm_activity(PM_IDLE_DOMAIN, CONFIG_RTL8730E_PM_BT_ACTIVITY);
+#endif
 }
 
 extern int wifi_set_ips_internal(u8 enable);
@@ -119,6 +132,7 @@ static uint32_t rtk_bt_wake_host_irq_handler(void *data)
 static struct
 {
 	struct pm_callback_s pm_cb;
+	bool ble_suspended;
 } g_blepm =
 	{
 		.pm_cb.name = "rtl8730e_ble",
@@ -126,7 +140,6 @@ static struct
 		.pm_cb.prepare = amebasmart_ble_pmprepare,
 	};
 #endif
-
 
 /****************************************************************************
  * Name: up_pm_notify
@@ -148,26 +161,19 @@ static struct
  *   consumption state when it returned OK to the prepare() call.
  *
  ****************************************************************************/
-static void up_pm_notify(struct pm_callback_s *cb, int domain,
+#ifdef CONFIG_PM
+static void amebasmart_ble_pmnotify(struct pm_callback_s *cb, int domain,
 				enum pm_state_e pmstate)
 {
 	switch (pmstate) {
-	case PM_NORMAL:
-		/* Logic for PM_NORMAL goes here */
+	case PM_NORMAL:		/* Logic for PM_NORMAL goes here */
+	case PM_IDLE:		/* Logic for PM_IDLE goes here */
+	case PM_STANDBY:	/* Logic for PM_STANDBY goes here */
 		break;
 
-	case PM_IDLE:
-		/* Logic for PM_IDLE goes here */
-		break;
-
-	case PM_STANDBY:
-		/* Logic for PM_STANDBY goes here */
-		break;
-
-	case PM_SLEEP:
-		/* Logic for PM_SLEEP goes here */
-		rtk_bt_enable_power_save();
+	case PM_SLEEP:		/* Logic for PM_SLEEP goes here */
 		system_enable_power_save();
+		rtk_bt_enable_power_save();
 		break;
 
 	default:
@@ -175,6 +181,7 @@ static void up_pm_notify(struct pm_callback_s *cb, int domain,
 		break;
 	}
 }
+#endif
 
 /****************************************************************************
  * Name: up_pm_prepare
@@ -208,10 +215,26 @@ static void up_pm_notify(struct pm_callback_s *cb, int domain,
  *              consumption modes!
  *
  ****************************************************************************/
-static int up_pm_prepare(struct pm_callback_s *cb, int domain,
+#ifdef CONFIG_PM
+extern uint8_t ble_client_connect_is_running;
+static int amebasmart_ble_pmprepare(struct pm_callback_s *cb, int domain,
 		enum pm_state_e pmstate)
 {
-	/* Logic to prepare for a reduced power state goes here. */
+	switch (pmstate) {
+	case PM_NORMAL:		/* Logic for PM_NORMAL goes here */
+	case PM_IDLE:		/* Logic for PM_IDLE goes here */
+	case PM_STANDBY:	/* Logic for PM_STANDBY goes here */
+		break;
+
+	case PM_SLEEP:		/* Logic for PM_SLEEP goes here */
+		if(ble_client_connect_is_running)
+			return ERROR;
+		break;
+
+	default:
+		/* Should not get here */
+		break;
+	}
 	return OK;
 }
 #endif /* CONFIG_PM */
@@ -219,6 +242,7 @@ static int up_pm_prepare(struct pm_callback_s *cb, int domain,
 void rtk_bt_power_save_init(void)
 {
 #ifdef CONFIG_PM	/* If PM is enable inti BT power save */
+	int result;
 	rtk_bt_suspend_callback = bt_power_suspend_callback;
 	rtk_bt_resume_callback = bt_power_resume_callback;
 
@@ -233,7 +257,10 @@ void rtk_bt_power_save_init(void)
 
 	InterruptRegister((IRQ_FUN)rtk_bt_wake_host_irq_handler, BT_WAKE_HOST_IRQ, NULL, INT_PRI_LOWEST);
 
-	DEBUGVERIFY(pm_register(&g_blepm.pm_cb) == OK);
+	/* Register to receive power management callbacks */
+	result = pm_register(&g_blepm.pm_cb);
+	DEBUGASSERT(result == OK);
+	UNUSED(result);
 #endif
 }
 
@@ -253,6 +280,9 @@ void rtk_bt_power_save_deinit(void)
 
 	rtk_bt_suspend_callback = NULL;
 	rtk_bt_resume_callback = NULL;
+
+	/* Unregister power management callbacks */
+	pm_unregister(&g_blepm.pm_cb);
 #endif
 }
-// #endif
+#endif
