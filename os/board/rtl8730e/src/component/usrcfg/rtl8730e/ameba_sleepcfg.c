@@ -59,7 +59,7 @@ WakeEvent_TypeDef sleep_wevent_config[] = {
 	{WAKE_SRC_WDG2,							1,				OFF,				OFF,				OFF},
 	{WAKE_SRC_WDG1,							1,				OFF,				OFF,				OFF},
 	{WAKE_SRC_UART2,						1,				OFF,				OFF,				OFF},
-	{WAKE_SRC_UART1,						0,				OFF,				OFF,				OFF},
+	{WAKE_SRC_UART1,						0,				OFF,				OFF,				ON},
 	{WAKE_SRC_UART0,						0,				OFF,				OFF,				OFF},
 	{WAKE_SRC_SPI1,							0,				OFF,				OFF,				OFF},
 	{WAKE_SRC_SPI0,							0,				OFF,				OFF,				OFF},
