@@ -248,8 +248,8 @@ ifeq ($(CONFIG_BINARY_SIGNING),y)
 #CMN_CSRCS += amebasmart_signature.c
 endif
 ifeq ($(CONFIG_PM),y)
-  #CMN_CSRCS += psci.c ameba_pmc.c
-  #CMN_ASRCS += a32_pm.S
+  CMN_CSRCS += psci.c ameba_pmc.c
+  CMN_ASRCS += a32_pm.S
 endif
 ifeq ($(CONFIG_SMP),y)
   #CMN_CSRCS += smp.c

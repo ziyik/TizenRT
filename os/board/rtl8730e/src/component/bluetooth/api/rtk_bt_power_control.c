@@ -22,8 +22,16 @@
 #if defined(CONFIG_PM) && !defined(CONFIG_RTL8730E_PM_BT_ACTIVITY)
 #define CONFIG_RTL8730E_PM_BT_ACTIVITY  10
 #endif
-#if defined(CONFIG_PM)
-#define PM_IDLE_DOMAIN             0 /* Revisit */
+// #if defined(CONFIG_PM)
+// #define PM_IDLE_DOMAIN             0 /* Revisit */
+// #endif
+
+#ifdef CONFIG_PM
+#include <tinyara/pm/pm.h>
+static void amebasmart_ble_pmnotify(FAR struct pm_callback_s *cb, int domain,
+										enum pm_state_e pmstate);
+static int  amebasmart_ble_pmprepare(FAR struct pm_callback_s *cb, int domain,
+										enum pm_state_e pmstate);
 #endif
 
 rtk_bt_ps_callback rtk_bt_suspend_callback = NULL;
@@ -255,7 +263,7 @@ void rtk_bt_power_save_init(void)
 	/* register callback before entering ps mode and after exiting ps mode */
 	pmu_register_sleep_callback(PMU_BT_DEVICE, (PSM_HOOK_FUN)rtk_bt_suspend, NULL, (PSM_HOOK_FUN)rtk_bt_resume, NULL);
 
-	InterruptRegister((IRQ_FUN)rtk_bt_wake_host_irq_handler, BT_WAKE_HOST_IRQ, NULL, INT_PRI_LOWEST);
+	InterruptRegister((IRQ_FUN)rtk_bt_wake_host_irq_handler, BT_WAKE_HOST_IRQ, (int)NULL, INT_PRI_LOWEST);
 
 	/* Register to receive power management callbacks */
 	result = pm_register(&g_blepm.pm_cb);

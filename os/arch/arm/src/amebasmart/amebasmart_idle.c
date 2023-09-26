@@ -30,6 +30,8 @@
 
 #ifdef CONFIG_PM
 #include <tinyara/pm/pm.h>
+#include "amebasmart_config.h"
+#include "arch_timer.h"
 //For reference to up_rtc_gettime() and up_rtc_time()
 // #include "amebasmart_rtc.h"
 #include "ameba_soc.h"
@@ -62,6 +64,7 @@ int up_pmsleep(void)
 static void up_idlepm(void)
 {
 	static enum pm_state_e oldstate = PM_NORMAL;
+	uint32_t xModifiableIdleTime = 0;
 	enum pm_state_e newstate;
 	irqstate_t flags;
 	int ret;
@@ -130,14 +133,14 @@ static void up_idlepm(void)
 #endif
 						// Interrupt source from BT/UART will wake cpu up, just leave expected idle time as 0
 						// Enter sleep mode
-						configPRE_SLEEP_PROCESSING(0);
+						configPRE_SLEEP_PROCESSING(xModifiableIdleTime);
 						/* When wake from pg, arm timer has been reset, so a new compare value is necessary to
 						trigger an timer interrupt */
 						if (pmu_get_sleep_type() == SLEEP_PG) {
 							arm_arch_timer_set_compare(arm_arch_timer_count() + 50000);
 						}
 						arm_arch_timer_int_mask(0);
-						configPOST_SLEEP_PROCESSING(0);
+						configPOST_SLEEP_PROCESSING(xModifiableIdleTime);
 					}
 					else {
 						/* power saving when idle*/
