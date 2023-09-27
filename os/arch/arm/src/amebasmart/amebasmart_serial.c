@@ -1207,6 +1207,7 @@ static void amebasmart_serial_pmnotify(FAR struct pm_callback_s *cb, int domain,
 		case PM_STANDBY:
 		case PM_SLEEP:
 		default:
+			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
 			break;
 	}
 
@@ -1256,6 +1257,7 @@ static int amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
 		case PM_NORMAL:
 		case PM_IDLE:
 		case PM_STANDBY:
+			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
 			break;
 
 		case PM_SLEEP:
@@ -1264,6 +1266,7 @@ static int amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
 			 * UART2_DEV: hp uart2
 			 * UART3_DEV: hp uart3_bt
 			 * LOGUART_DEV: KM0 log uart */
+			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
 #ifdef CONFIG_RTL8730E_UART0
 			if ((g_uart0priv.txint_enable) && (!serial_writable(sdrv[0]))) {		/* If Tx init enable and FIFO not empty */
 					return ERROR;

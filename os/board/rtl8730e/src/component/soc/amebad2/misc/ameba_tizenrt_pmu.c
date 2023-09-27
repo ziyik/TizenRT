@@ -25,7 +25,7 @@ static uint32_t sysactive_timeout_flag = 0;
 volatile u32 cpuhp_flag[configNUM_CORES];
 #endif
 
-u32 tickless_debug = 0;
+u32 tickless_debug = 1;
 
 /* ++++++++ TizenRT macro implementation ++++++++ */
 
@@ -280,7 +280,8 @@ void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 	IPCM0_DEV->IPCx_USR[IPC_INT_CHAN_SHELL_SWITCH] = 0x00000000;
 	InterruptDis(UART_LOG_IRQ);
 #endif
-
+	printf("\nTick before sleep LP: %d\n", tick_before_sleep);
+	printf("\nTick before compensation: %d\n", TICK2MSEC(clock_systimer()));
 	if (sleep_type == SLEEP_CG) {
 		SOCPS_SleepCG();
 	} else {
@@ -300,7 +301,10 @@ void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 #ifndef CONFIG_PLATFORM_TIZENRT_OS
 	vTaskStepTick(ms_passed); /*  update kernel tick */
 #else
+	printf("\nMissing tick in msec: %d\n", ms_passed);
+	printf("\nTick after compensation: %d\n", TICK2MSEC(clock_systimer()));
 	g_system_timer += ms_passed;
+	printf("\nTotal sum: %x\n", TICK2MSEC(clock_systimer()));
 #endif
 
 	sysactive_timeout_flag = 0;
@@ -346,117 +350,6 @@ u32 check_wfi_state(u8 core_id)
 		return 0;
 	}
 }
-
-//Breakdown and move to amebasmart_idle.c
-#ifndef CONFIG_PLATFORM_TIZENRT_OS
-void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime)
-{
-	uint32_t xModifiableIdleTime;
-	eSleepModeStatus eSleepStatus;
-
-	/* need further check*/
-	system_can_yield = 0;
-
-	if (up_cpu_index() == 0) {
-		/* mask sys tick interrupt*/
-		arm_arch_timer_int_mask(pdTRUE);
-
-		/* Enter a critical section but don't use the taskENTER_CRITICAL()
-		method as that will mask interrupts that should exit sleep mode. */
-		portDISABLE_INTERRUPTS();
-
-		// TASK_LOCK is for secondary core, current stage comment it first
-		// portGET_TASK_LOCK();
-		// TizenRT PM module will determine status based on CPU loading, thus might not need to check CPU status again
-		// eSleepStatus = eTaskConfirmSleepModeStatus();
-		// portRELEASE_TASK_LOCK();
-
-		/* If a context switch is pending or a task is waiting for the scheduler
-		to be unsuspended then abandon the low power entry. */
-		if (eSleepStatus == eAbortSleep) {
-			arm_arch_timer_int_mask(pdFALSE);
-		} else if (tizenrt_ready_to_sleep()) {
-
-			//HAL_WRITE32(SYSTEM_CTRL_BASE_LP, REG_AON_AON_BACKUP2, 0);
-			/* Sleep until something happens.  configPRE_SLEEP_PROCESSING() can
-			set its parameter to 0 to indicate that its implementation contains
-			its own wait for interrupt or wait for event instruction, and so wfi
-			should not be executed again.  However, the original expected idle
-			time variable must remain unmodified, so a copy is taken. */
-			xModifiableIdleTime = (uint32_t)xExpectedIdleTime;
-
-#if ( configNUM_CORES > 1 )
-			/*PG flow */
-			if (pmu_get_sleep_type() == SLEEP_PG) {
-				/* CPU1 just come back from pg, so can't sleep here */
-				if (pmu_get_secondary_cpu_state(1) == CPU1_WAKE_FROM_PG) {
-					goto EXIT;
-				}
-
-				/* CPU1 is in task schedular, tell CPU1 to enter hotplug */
-				if (pmu_get_secondary_cpu_state(1) == CPU1_RUNNING) {
-					/* CPU1 may in WFI idle state. Wake it up to enter hotplug itself */
-					portENABLE_INTERRUPTS();
-					arm_gic_raise_softirq(1, 0);
-					arm_arch_timer_int_mask(pdFALSE);
-					DelayUs(100);
-					goto EXIT;
-				}
-
-				/* CG flow */
-			} else {
-				if (!check_wfi_state(1)) {
-					goto EXIT;
-				}
-			}
-#endif
-			configPRE_SLEEP_PROCESSING(xModifiableIdleTime);
-
-			/* When wake from pg, arm timer has been reset, so a new compare value is necessary to
-			   trigger an timer interrupt */
-			if (pmu_get_sleep_type() == SLEEP_PG) {
-				arm_arch_timer_set_compare(arm_arch_timer_count() + 50000);
-			}
-			arm_arch_timer_int_mask(pdFALSE);
-			//if (xModifiableIdleTime > 0) {
-			//	__asm volatile("dsb");
-			//	__asm volatile("wfi");
-			//	__asm volatile("isb");
-			//}
-			configPOST_SLEEP_PROCESSING(xModifiableIdleTime);
-		} else {
-			/* power saving when idle*/
-			arm_arch_timer_int_mask(pdFALSE);
-			__asm(" DSB");
-			__asm(" WFI");
-			__asm(" ISB");
-			/* power saving when idle*/
-		}
-#if ( configNUM_CORES > 1 )
-EXIT:
-#endif
-		/* Re-enable interrupts and sys tick*/
-		portENABLE_INTERRUPTS();
-	} else if (portGET_CORE_ID() == 1) {
-		if (pmu_get_sleep_type() == SLEEP_PG) {
-			if (tizenrt_ready_to_sleep()) {
-				/* CPU1 will enter hotplug state. Raise a task yield to migrate its task */
-				pmu_set_secondary_cpu_state(1, CPU1_HOTPLUG);
-				portYIELD();
-			}
-		}
-
-		portDISABLE_INTERRUPTS();
-		__asm("	DSB");
-		__asm("	WFI");
-		__asm("	ISB");
-		portENABLE_INTERRUPTS();
-	}
-
-	/* need further check*/
-	system_can_yield = 1;
-}
-#endif
 
 /* -------- TizenRT macro implementation -------- */
 

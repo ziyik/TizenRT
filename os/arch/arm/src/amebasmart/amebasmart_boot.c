@@ -408,12 +408,12 @@ void arm_boot(void)
    */
 
   //SMP pending for Tizen Confirmation//
+#ifdef CONFIG_SMP
   cp15_wrvbar((uint32_t)_vector_start);
   amebasmart_cpu_enable();
-
+#else
   //psci need to be initiated if smp is not enabled
-#if ( configNUM_CORES == 1 )
-  psci_init();
+  // psci_init();
 #endif
   // TBD: Complete the rest of the step in app_start, prvSetupHardware will be done in os_start()
   app_start();

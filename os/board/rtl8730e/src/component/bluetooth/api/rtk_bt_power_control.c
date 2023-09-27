@@ -177,9 +177,11 @@ static void amebasmart_ble_pmnotify(struct pm_callback_s *cb, int domain,
 	case PM_NORMAL:		/* Logic for PM_NORMAL goes here */
 	case PM_IDLE:		/* Logic for PM_IDLE goes here */
 	case PM_STANDBY:	/* Logic for PM_STANDBY goes here */
+		printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
 		break;
 
 	case PM_SLEEP:		/* Logic for PM_SLEEP goes here */
+		printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
 		system_enable_power_save();
 		rtk_bt_enable_power_save();
 		break;
@@ -232,9 +234,11 @@ static int amebasmart_ble_pmprepare(struct pm_callback_s *cb, int domain,
 	case PM_NORMAL:		/* Logic for PM_NORMAL goes here */
 	case PM_IDLE:		/* Logic for PM_IDLE goes here */
 	case PM_STANDBY:	/* Logic for PM_STANDBY goes here */
+		printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
 		break;
 
 	case PM_SLEEP:		/* Logic for PM_SLEEP goes here */
+		printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
 		if(ble_client_connect_is_running)
 			return ERROR;
 		break;
@@ -261,6 +265,7 @@ void rtk_bt_power_save_init(void)
 #endif
 
 	/* register callback before entering ps mode and after exiting ps mode */
+#ifdef CONFIG_PM
 	pmu_register_sleep_callback(PMU_BT_DEVICE, (PSM_HOOK_FUN)rtk_bt_suspend, NULL, (PSM_HOOK_FUN)rtk_bt_resume, NULL);
 
 	InterruptRegister((IRQ_FUN)rtk_bt_wake_host_irq_handler, BT_WAKE_HOST_IRQ, (int)NULL, INT_PRI_LOWEST);
@@ -269,6 +274,7 @@ void rtk_bt_power_save_init(void)
 	result = pm_register(&g_blepm.pm_cb);
 	DEBUGASSERT(result == OK);
 	UNUSED(result);
+#endif
 #endif
 }
 

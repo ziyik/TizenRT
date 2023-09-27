@@ -26,7 +26,7 @@
 
 // #include <tinyara/arch.h>
 #include "../../include/armv7-a/irq.h"
-// #include "arm_internal.h"
+#include "arm_internal.h"
 
 #ifdef CONFIG_PM
 #include <tinyara/pm/pm.h>
@@ -35,6 +35,10 @@
 //For reference to up_rtc_gettime() and up_rtc_time()
 // #include "amebasmart_rtc.h"
 #include "ameba_soc.h"
+#endif
+
+#ifdef CONFIG_SMP
+#include "gic.h"
 #endif
 
 static u32 system_can_yield = 1; 
@@ -59,7 +63,53 @@ int up_pmsleep(void)
  *   Perform IDLE state power management.
  *
  ****************************************************************************/
+RTIM_TimeBaseInitTypeDef TIM_InitStruct_GT[8];
+static void pg_timer_int_handler(u32 Data)
+{
 
+	RTIM_TimeBaseInitTypeDef *TIM_InitStruct = (RTIM_TimeBaseInitTypeDef *) Data;
+	printf("pg Ap timer handler\n");
+	printf("WAK_Event0 = %x 1=%x\n", HAL_READ32(PMC_BASE, WAK_STATUS0), HAL_READ32(PMC_BASE, WAK_STATUS1));
+
+	RTIM_INTClear(TIMx[TIM_InitStruct->TIM_Idx]);
+
+	printf("WAK_Event0 = %x 1=%x\n", HAL_READ32(PMC_BASE, WAK_STATUS0), HAL_READ32(PMC_BASE, WAK_STATUS1));
+	RTIM_Cmd(TIMx[TIM_InitStruct->TIM_Idx], DISABLE);
+
+}
+
+static void set_timer_interrupt(u32 TimerIdx, u32 Timercnt) {
+	printf("hs pg_sleep_Test aon_timer:%d Ms\n", Timercnt);
+	printf("\nTick before sleep: %d\n", TICK2MSEC(clock_systimer()));
+	RTIM_TimeBaseInitTypeDef *pTIM_InitStruct_temp = &TIM_InitStruct_GT[TimerIdx];
+	// RCC_PeriphClockCmd(APBPeriph_TIM0, APBPeriph_TIM0_CLOCK, ENABLE);
+	RCC_PeriphClockCmd(APBPeriph_TIM1, APBPeriph_TIM1_CLOCK, ENABLE);
+	// RCC_PeriphClockCmd(APBPeriph_TIM2, APBPeriph_TIM2_CLOCK, ENABLE);
+	// RCC_PeriphClockCmd(APBPeriph_TIM3, APBPeriph_TIM3_CLOCK, ENABLE);
+	// RCC_PeriphClockCmd(APBPeriph_TIM4, APBPeriph_TIM4_CLOCK, ENABLE);
+	// RCC_PeriphClockCmd(APBPeriph_TIM5, APBPeriph_TIM5_CLOCK, ENABLE);
+	// RCC_PeriphClockCmd(APBPeriph_TIM6, APBPeriph_TIM6_CLOCK, ENABLE);
+	// RCC_PeriphClockCmd(APBPeriph_TIM7, APBPeriph_TIM7_CLOCK, ENABLE);
+
+	RTIM_TimeBaseStructInit(pTIM_InitStruct_temp);
+
+	pTIM_InitStruct_temp->TIM_Idx = TimerIdx;
+	pTIM_InitStruct_temp->TIM_Prescaler = 0x00;
+	pTIM_InitStruct_temp->TIM_Period = 32768 * Timercnt - 1;//0xFFFF>>11;
+
+	pTIM_InitStruct_temp->TIM_UpdateEvent = ENABLE; /* UEV enable */
+	pTIM_InitStruct_temp->TIM_UpdateSource = TIM_UpdateSource_Overflow;
+	pTIM_InitStruct_temp->TIM_ARRProtection = ENABLE;
+
+	RTIM_TimeBaseInit(TIMx[TimerIdx], pTIM_InitStruct_temp, TIMx_irq[TimerIdx], (IRQ_FUN) pg_timer_int_handler,
+						(u32)pTIM_InitStruct_temp);
+	RTIM_INTConfig(TIMx[TimerIdx], TIM_IT_Update, ENABLE);
+	RTIM_Cmd(TIMx[TimerIdx], ENABLE);
+	printf("hs Timer %x cnt %d\n", (WAKE_SRC_Timer0 << TimerIdx), Timercnt);
+	SOCPS_SetAPWakeEvent_MSK0((WAKE_SRC_Timer0 << TimerIdx), ENABLE);
+}
+
+bool set_interrupt_count = 0;
 #ifdef CONFIG_PM
 static void up_idlepm(void)
 {
@@ -94,13 +144,21 @@ static void up_idlepm(void)
 		/* MCU-specific power management logic */
 		switch (newstate) {
 			case PM_NORMAL:
+				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
 			case PM_IDLE:
+				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
 				break;
 			case PM_STANDBY:
+				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
 				break;
 			case PM_SLEEP:
 				/* need further check*/
 				system_can_yield = 0;
+				// set interrupt source
+				if(!set_interrupt_count) {
+					set_timer_interrupt(0, 5);
+					set_interrupt_count = 1;
+				}
 				if (up_cpu_index() == 0) {
 					/* mask sys tick interrupt*/
 					arm_arch_timer_int_mask(1);
@@ -118,7 +176,7 @@ static void up_idlepm(void)
 							/* CPU1 is in task schedular, tell CPU1 to enter hotplug */
 							if (pmu_get_secondary_cpu_state(1) == CPU1_RUNNING) {
 								/* CPU1 may in WFI idle state. Wake it up to enter hotplug itself */
-								up_enable_irq();
+								up_irq_enable();
 								arm_gic_raise_softirq(1, 0);
 								arm_arch_timer_int_mask(0);
 								DelayUs(100);
@@ -153,7 +211,8 @@ static void up_idlepm(void)
 EXIT:
 #endif				
 					/* Re-enable interrupts and sys tick*/
-					up_enable_irq();
+					up_irq_enable();
+					// irqrestore(flags);
 				}
 				else if (up_cpu_index() == 1) {
 					if (pmu_get_sleep_type() == SLEEP_PG) {
@@ -169,12 +228,15 @@ EXIT:
 					__asm("	DSB");
 					__asm("	WFI");
 					__asm("	ISB");
-					up_enable_irq();
+					up_irq_enable();
 				}
 				/* need further check*/
 				system_can_yield = 1;
 				// Switch status back to normal mode after wake up from interrupt
 				ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
+				pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
+				printf("Check the state 1 : %d\n", pm_checkstate(PM_IDLE_DOMAIN));
+				printf("Check the state 2 : %d\n", pm_querystate(PM_IDLE_DOMAIN));
 				if (ret < 0) {
 					oldstate = PM_NORMAL;
 				}
@@ -187,7 +249,7 @@ EXIT:
 		//TODO: Handle critical section access logic for SMP case in 8730E?
 		//Is leave_critical_section required? In accordance with irqsave()^
 #if ( configNUM_CORES > 1 )
-		up_enable_irq();
+		up_irq_enable();
 #endif
 	}
 }

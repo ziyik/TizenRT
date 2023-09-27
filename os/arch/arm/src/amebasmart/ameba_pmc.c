@@ -7,6 +7,7 @@
 #include "ameba_soc.h"
 #include "sys_io.h"
 #include "gic.h"
+#include "psci.h"
 
 #define GIC_MAX_NUM_INTR (96+32)
 #define ROUND_UP(divider, divisor) (divider%divisor) ? ((divider/divisor)+1) : (divider/divisor)
@@ -174,7 +175,9 @@ void SOCPS_SleepPG(void)
 	HAL_WRITE8(SYSTEM_CTRL_BASE_LP, REG_LSYS_AP_STATUS_SW,
 			   HAL_READ8(SYSTEM_CTRL_BASE_LP, REG_LSYS_AP_STATUS_SW) & (~ LSYS_BIT_AP_RUNNING));
 
+	printf("pg-s1\n");
 	cpu_suspend(0, SOCPS_PG_Enter);
+	printf("pg-s2\n");
 
 	//restore gic registers
 	SOCPS_Restore_GIC();
