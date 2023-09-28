@@ -21,6 +21,7 @@
 #include "ameba_ota.h"
 
 #ifdef CONFIG_PLATFORM_TIZENRT_OS
+#define configNUM_CORES CONFIG_NUM_CORES
 #include "ameba_tizenrt_pmu.h"
 #elif defined(PLATFORM_FREERTOS)
 #include "ameba_tizenrt_pmu.h"

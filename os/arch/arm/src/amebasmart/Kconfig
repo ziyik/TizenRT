@@ -20,6 +20,14 @@ config ARCH_CHIP_RTL8730E
 
 endchoice
 
+config NUM_CORES
+	int "Realtek RTL8730E Number of AP Cores"
+	depends on ARCH_CHIP_RTL8730E
+	range 1 1 if !SMP
+	range 1 2 if SMP
+	default 1 if !SMP
+	default 1 if SMP
+
 menu "Realtek RTL8730E Peripheral Support"
 
 config RTL8730E_UART
