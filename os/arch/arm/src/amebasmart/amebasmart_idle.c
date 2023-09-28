@@ -80,7 +80,7 @@ static void pg_timer_int_handler(u32 Data)
 
 static void set_timer_interrupt(u32 TimerIdx, u32 Timercnt) {
 	printf("hs pg_sleep_Test aon_timer:%d Ms\n", Timercnt);
-	printf("\nTick before sleep: %d\n", TICK2MSEC(clock_systimer()));
+	printf("\nClock(g_system_timer) before sleep: %d\n", TICK2MSEC(clock_systimer()));
 	RTIM_TimeBaseInitTypeDef *pTIM_InitStruct_temp = &TIM_InitStruct_GT[TimerIdx];
 	// RCC_PeriphClockCmd(APBPeriph_TIM0, APBPeriph_TIM0_CLOCK, ENABLE);
 	RCC_PeriphClockCmd(APBPeriph_TIM1, APBPeriph_TIM1_CLOCK, ENABLE);
@@ -156,7 +156,7 @@ static void up_idlepm(void)
 				system_can_yield = 0;
 				// set interrupt source
 				if(!set_interrupt_count) {
-					set_timer_interrupt(0, 5);
+					set_timer_interrupt(1, 5);
 					set_interrupt_count = 1;
 				}
 				if (up_cpu_index() == 0) {
