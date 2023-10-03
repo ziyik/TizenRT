@@ -300,3 +300,19 @@ void rtk_bt_power_save_deinit(void)
 #endif
 }
 #endif
+
+#ifdef CONFIG_PM
+void rtk_NP_powersave_enable(void)
+{
+	int *ret = NULL;
+	ret = bt_ipc_api_host_message_send(RTK_BT_IPC_POWER_STATE, 4, NULL, 0);	/* Inform NP to release OS lock */
+	osif_mem_free(ret);
+}
+
+void rtk_NP_powersave_disable(void)
+{
+	int *ret = NULL;
+	ret = bt_ipc_api_host_message_send(RTK_BT_IPC_POWER_STATE, 5, NULL, 0);	/* Inform NP to acquire OS lock */
+	osif_mem_free(ret);
+}
+#endif
