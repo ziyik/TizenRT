@@ -84,8 +84,17 @@ int up_timerisr(int irq, uint32_t *regs)
 
     last_cycle = arm_arch_timer_compare();
 
-    delta_ticks = 1;
-
+// #if( configUSE_TICKLESS_IDLE == 1 )
+// Replace with CONFIG_PM first, this is to compensate tick to virtual timer
+#ifdef CONFIG_PM
+	  if (arm_arch_timer_count() < last_cycle) {
+		  return;
+	  } else {
+		  delta_ticks = (uint32_t)((arm_arch_timer_count() - last_cycle) / SYSTICK_RELOAD) + 1;
+	  }
+#else
+	  delta_ticks = 1;
+#endif
     arm_arch_timer_set_compare(last_cycle + delta_ticks * SYSTICK_RELOAD);
     return 0;
 }
