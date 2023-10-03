@@ -41,7 +41,8 @@
 #include "gic.h"
 #endif
 
-static u32 system_can_yield = 1; 
+static u32 system_can_yield = 1;
+static bool system_np_wakelock = 1;
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -80,7 +81,7 @@ static void pg_timer_int_handler(u32 Data)
 
 static void set_timer_interrupt(u32 TimerIdx, u32 Timercnt) {
 	printf("hs pg_sleep_Test aon_timer:%d Ms\n", Timercnt);
-	printf("\nClock(g_system_timer) before sleep: %d\n", TICK2MSEC(clock_systimer()));
+	// printf("\nClock(g_system_timer) before sleep: %d\n", TICK2MSEC(clock_systimer()));
 	RTIM_TimeBaseInitTypeDef *pTIM_InitStruct_temp = &TIM_InitStruct_GT[TimerIdx];
 	// RCC_PeriphClockCmd(APBPeriph_TIM0, APBPeriph_TIM0_CLOCK, ENABLE);
 	RCC_PeriphClockCmd(APBPeriph_TIM1, APBPeriph_TIM1_CLOCK, ENABLE);
@@ -129,7 +130,10 @@ static void up_idlepm(void)
 		//Any additional implications of putting a core in critical section while trying to sleep?
 		/* Perform board-specific, state-dependent logic here */
 	  	printf("newstate= %d oldstate=%d\n", newstate, oldstate);
-
+		if(oldstate == PM_STANDBY && newstate != PM_SLEEP) {
+			// rtk_NP_powersave_disable();
+			system_np_wakelock = 1;
+		}
 		/* Then force the global state change */
 
 		ret = pm_changestate(PM_IDLE_DOMAIN, newstate);
@@ -149,6 +153,10 @@ static void up_idlepm(void)
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
 				break;
 			case PM_STANDBY:
+				if(system_np_wakelock) {
+					// rtk_NP_powersave_enable();
+					system_np_wakelock = 0;
+				}
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
 				break;
 			case PM_SLEEP:
@@ -190,7 +198,7 @@ static void up_idlepm(void)
 						}
 #endif
 						// Interrupt source from BT/UART will wake cpu up, just leave expected idle time as 0
-						// Enter sleep mode
+						// Enter sleep mode for AP
 						configPRE_SLEEP_PROCESSING(xModifiableIdleTime);
 						/* When wake from pg, arm timer has been reset, so a new compare value is necessary to
 						trigger an timer interrupt */
@@ -232,9 +240,12 @@ EXIT:
 				}
 				/* need further check*/
 				system_can_yield = 1;
+				// IPC AP->NP to acquire wakelock
+				system_np_wakelock = 1;
+				// rtk_NP_powersave_disable();
 				// Switch status back to normal mode after wake up from interrupt
 				ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
-				pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
+				// pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
 				printf("Check the state 1 : %d\n", pm_checkstate(PM_IDLE_DOMAIN));
 				printf("Check the state 2 : %d\n", pm_querystate(PM_IDLE_DOMAIN));
 				if (ret < 0) {
