@@ -35,6 +35,7 @@
 //For reference to up_rtc_gettime() and up_rtc_time()
 // #include "amebasmart_rtc.h"
 #include "ameba_soc.h"
+#include "osdep_service.h"
 #endif
 
 #ifdef CONFIG_SMP
@@ -44,26 +45,27 @@
 static u32 system_can_yield = 1;
 static bool system_np_wakelock = 1;
 /****************************************************************************
- * Public Functions
- ****************************************************************************/
-
-//TODO: -PENDING- implementation needed if enter_sleep_write function support in procfs is required
-//		Refer up_pmsleep() in arch/arm/src/stm32l4/stm32l4_idle.c
-#ifdef CONFIG_ARCH_SUPPORT_ENTER_SLEEP
-int up_pmsleep(void)
-{
-	//TODO:
-	return OK;
-}
-#endif
-
-/****************************************************************************
  * Name: up_idlepm
  *
  * Description:
  *   Perform IDLE state power management.
  *
  ****************************************************************************/
+struct task_struct np_wakelock_release_handler;
+extern void rtk_NP_powersave_enable(void);
+static void np_wakelock_release(void) {
+	if (rtw_create_task(&np_wakelock_release_handler, (const char *const)"rtk_NP_powersave_enable_task", 512, 3, (void*)rtk_NP_powersave_enable, NULL) != 1) {
+		DiagPrintf("Create np_wakelock_release_handler Err!!\n");
+	}
+}
+extern void rtk_NP_powersave_disable(void);
+struct task_struct np_wakelock_acquire_handler;
+static void np_wakelock_acquire(void) {
+	if (rtw_create_task(&np_wakelock_acquire_handler, (const char *const)"rtk_NP_powersave_disable_task", 512, 3, (void*)rtk_NP_powersave_disable, NULL) != 1) {
+		DiagPrintf("Create np_wakelock_acquire_handler Err!!\n");
+	}
+}
+
 RTIM_TimeBaseInitTypeDef TIM_InitStruct_GT[8];
 static void pg_timer_int_handler(u32 Data)
 {
@@ -131,7 +133,8 @@ static void up_idlepm(void)
 		/* Perform board-specific, state-dependent logic here */
 	  	printf("newstate= %d oldstate=%d\n", newstate, oldstate);
 		if(oldstate == PM_STANDBY && newstate != PM_SLEEP) {
-			// rtk_NP_powersave_disable();
+			np_wakelock_acquire();
+			rtw_delete_task(&np_wakelock_acquire_handler);
 			system_np_wakelock = 1;
 		}
 		/* Then force the global state change */
@@ -154,7 +157,8 @@ static void up_idlepm(void)
 				break;
 			case PM_STANDBY:
 				if(system_np_wakelock) {
-					// rtk_NP_powersave_enable();
+					np_wakelock_release();
+					rtw_delete_task(&np_wakelock_release_handler);
 					system_np_wakelock = 0;
 				}
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
@@ -242,7 +246,8 @@ EXIT:
 				system_can_yield = 1;
 				// IPC AP->NP to acquire wakelock
 				system_np_wakelock = 1;
-				// rtk_NP_powersave_disable();
+				np_wakelock_acquire();
+				rtw_delete_task(&np_wakelock_acquire_handler);
 				// Switch status back to normal mode after wake up from interrupt
 				ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
 				// pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
