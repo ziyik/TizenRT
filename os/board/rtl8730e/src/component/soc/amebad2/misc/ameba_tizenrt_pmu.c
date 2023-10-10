@@ -103,6 +103,7 @@ uint32_t pmu_set_sysactive_time(uint32_t timeout)
 #ifndef CONFIG_PLATFORM_TIZENRT_OS
 	TimeOut = xTaskGetTickCount() + timeout;
 #else
+	printf("\nclock_systimer: %8lld\n", TICK2MSEC(clock_systimer()));
 	TimeOut = TICK2MSEC(clock_systimer()) + timeout;
 #endif
 
@@ -281,7 +282,7 @@ void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 	InterruptDis(UART_LOG_IRQ);
 #endif
 	printf("\nTick before sleep LP: %d\n", tick_before_sleep);
-	printf("\nTick before compensation: %d\n", TICK2MSEC(clock_systimer()));
+	printf("\nTick before compensation: %8lld\n", g_system_timer);
 	if (sleep_type == SLEEP_CG) {
 		SOCPS_SleepCG();
 	} else {
@@ -301,10 +302,11 @@ void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 #ifndef CONFIG_PLATFORM_TIZENRT_OS
 	vTaskStepTick(ms_passed); /*  update kernel tick */
 #else
-	printf("\nMissing tick in msec: %d\n", ms_passed);
-	printf("\nTick after compensation: %d\n", TICK2MSEC(clock_systimer()));
-	g_system_timer += ms_passed;
-	printf("\nTotal sum: %x\n", TICK2MSEC(clock_systimer()));
+	printf("\nMissing tick in msec: %8lld\n", (u64)ms_passed);
+	irqstate_t flags  = irqsave();
+	g_system_timer += (u64)ms_passed;
+	printf("\ng_system_timer after compensation: %8lld\n", g_system_timer);
+	irqrestore(flags);
 #endif
 
 	sysactive_timeout_flag = 0;

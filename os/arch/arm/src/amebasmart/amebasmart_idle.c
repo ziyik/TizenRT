@@ -44,6 +44,7 @@
 
 static u32 system_can_yield = 1;
 static bool system_np_wakelock = 1;
+extern void sysdbg_print(void);
 /****************************************************************************
  * Name: up_idlepm
  *
@@ -82,8 +83,8 @@ static void pg_timer_int_handler(u32 Data)
 }
 
 static void set_timer_interrupt(u32 TimerIdx, u32 Timercnt) {
-	printf("hs pg_sleep_Test aon_timer:%d Ms\n", Timercnt);
-	// printf("\nClock(g_system_timer) before sleep: %d\n", TICK2MSEC(clock_systimer()));
+	printf("hs pg_sleep_Test aon_timer:%d ms\n", Timercnt * 1000);
+	printf("\nCheck g_system_timer: %8lld\n", g_system_timer);
 	RTIM_TimeBaseInitTypeDef *pTIM_InitStruct_temp = &TIM_InitStruct_GT[TimerIdx];
 	// RCC_PeriphClockCmd(APBPeriph_TIM0, APBPeriph_TIM0_CLOCK, ENABLE);
 	RCC_PeriphClockCmd(APBPeriph_TIM1, APBPeriph_TIM1_CLOCK, ENABLE);
@@ -132,17 +133,15 @@ static void up_idlepm(void)
 		//Any additional implications of putting a core in critical section while trying to sleep?
 		/* Perform board-specific, state-dependent logic here */
 	  	printf("newstate= %d oldstate=%d\n", newstate, oldstate);
-		if(oldstate == PM_STANDBY && newstate != PM_SLEEP) {
-			np_wakelock_acquire();
-			rtw_delete_task(&np_wakelock_acquire_handler);
-			system_np_wakelock = 1;
-		}
+
 		/* Then force the global state change */
 
 		ret = pm_changestate(PM_IDLE_DOMAIN, newstate);
 		if (ret < 0) {
 			/* The new state change failed, revert to the preceding state */
 			(void)pm_changestate(PM_IDLE_DOMAIN, oldstate);
+			newstate = oldstate;
+			goto EXIT2;
 		} else {
 			/* Save the new state */
 			oldstate = newstate;
@@ -154,6 +153,7 @@ static void up_idlepm(void)
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
 			case PM_IDLE:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
+				sysdbg_print();
 				break;
 			case PM_STANDBY:
 				if(system_np_wakelock) {
@@ -164,109 +164,124 @@ static void up_idlepm(void)
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
 				break;
 			case PM_SLEEP:
-				/* need further check*/
-				system_can_yield = 0;
-				// set interrupt source
+				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
+				sysdbg_print();
 				if(!set_interrupt_count) {
+					/* need further check*/
+					system_can_yield = 0;
+					// set interrupt source
 					set_timer_interrupt(1, 5);
 					set_interrupt_count = 1;
-				}
-				if (up_cpu_index() == 0) {
-					/* mask sys tick interrupt*/
-					arm_arch_timer_int_mask(1);
-					flags = irqsave();
-					if (tizenrt_ready_to_sleep()) {
+					if (up_cpu_index() == 0) {
+						/* mask sys tick interrupt*/
+						arm_arch_timer_int_mask(1);
+						// up_timer_detach();
+						flags = irqsave();
+						if (tizenrt_ready_to_sleep()) {
 // Consider for dual core condition
 #if ( configNUM_CORES > 1 )
-						/*PG flow */
-						if (pmu_get_sleep_type() == SLEEP_PG) {
-							/* CPU1 just come back from pg, so can't sleep here */
-							if (pmu_get_secondary_cpu_state(1) == CPU1_WAKE_FROM_PG) {
-								goto EXIT;
-							}
+							/*PG flow */
+							if (pmu_get_sleep_type() == SLEEP_PG) {
+								/* CPU1 just come back from pg, so can't sleep here */
+								if (pmu_get_secondary_cpu_state(1) == CPU1_WAKE_FROM_PG) {
+									goto EXIT;
+								}
 
-							/* CPU1 is in task schedular, tell CPU1 to enter hotplug */
-							if (pmu_get_secondary_cpu_state(1) == CPU1_RUNNING) {
-								/* CPU1 may in WFI idle state. Wake it up to enter hotplug itself */
-								up_irq_enable();
-								arm_gic_raise_softirq(1, 0);
-								arm_arch_timer_int_mask(0);
-								DelayUs(100);
-								goto EXIT;
+								/* CPU1 is in task schedular, tell CPU1 to enter hotplug */
+								if (pmu_get_secondary_cpu_state(1) == CPU1_RUNNING) {
+									/* CPU1 may in WFI idle state. Wake it up to enter hotplug itself */
+									up_irq_enable();
+									arm_gic_raise_softirq(1, 0);
+									arm_arch_timer_int_mask(0);
+									DelayUs(100);
+									goto EXIT;
+								}
+								/* CG flow */
+							} else {
+								if (!check_wfi_state(1)) {
+									goto EXIT;
+								}
 							}
-							/* CG flow */
-						} else {
-							if (!check_wfi_state(1)) {
-								goto EXIT;
-							}
-						}
 #endif
-						// Interrupt source from BT/UART will wake cpu up, just leave expected idle time as 0
-						// Enter sleep mode for AP
-						configPRE_SLEEP_PROCESSING(xModifiableIdleTime);
-						/* When wake from pg, arm timer has been reset, so a new compare value is necessary to
-						trigger an timer interrupt */
-						if (pmu_get_sleep_type() == SLEEP_PG) {
-							arm_arch_timer_set_compare(arm_arch_timer_count() + 50000);
+							// Interrupt source from BT/UART will wake cpu up, just leave expected idle time as 0
+							// Enter sleep mode for AP
+							configPRE_SLEEP_PROCESSING(xModifiableIdleTime);
+							/* When wake from pg, arm timer has been reset, so a new compare value is necessary to
+							trigger an timer interrupt */
+							if (pmu_get_sleep_type() == SLEEP_PG) {
+								arm_arch_timer_set_compare(arm_arch_timer_count() + 50000);
+								// up_timer_attach();
+								printf("\n[%s] - %d, welcome back~!\n",__FUNCTION__,__LINE__);
+							}
+							arm_arch_timer_int_mask(0);
+							configPOST_SLEEP_PROCESSING(xModifiableIdleTime);
 						}
-						arm_arch_timer_int_mask(0);
-						configPOST_SLEEP_PROCESSING(xModifiableIdleTime);
-					}
-					else {
-						/* power saving when idle*/
-						arm_arch_timer_int_mask(0);
-						__asm(" DSB");
-						__asm(" WFI");
-						__asm(" ISB");
-					}
+						else {
+							/* power saving when idle*/
+							arm_arch_timer_int_mask(0);
+							__asm(" DSB");
+							__asm(" WFI");
+							__asm(" ISB");
+						}
 #if ( configNUM_CORES > 1 )
 EXIT:
 #endif				
-					/* Re-enable interrupts and sys tick*/
-					up_irq_enable();
-					// irqrestore(flags);
-				}
-				else if (up_cpu_index() == 1) {
-					if (pmu_get_sleep_type() == SLEEP_PG) {
-						if (tizenrt_ready_to_sleep()) {
-							/* CPU1 will enter hotplug state. Raise a task yield to migrate its task */
-							pmu_set_secondary_cpu_state(1, CPU1_HOTPLUG);
-							// Check portYIELD();
-							portYIELD();
-						}
+						/* Re-enable interrupts and sys tick*/
+						up_irq_enable();
+						// irqrestore(flags);
 					}
+					else if (up_cpu_index() == 1) {
+						if (pmu_get_sleep_type() == SLEEP_PG) {
+							if (tizenrt_ready_to_sleep()) {
+								/* CPU1 will enter hotplug state. Raise a task yield to migrate its task */
+								pmu_set_secondary_cpu_state(1, CPU1_HOTPLUG);
+								// Check portYIELD();
+								portYIELD();
+							}
+						}
 
-					flags = irqsave();
-					__asm("	DSB");
-					__asm("	WFI");
-					__asm("	ISB");
-					up_irq_enable();
+						flags = irqsave();
+						__asm("	DSB");
+						__asm("	WFI");
+						__asm("	ISB");
+						up_irq_enable();
+					}
+					/* need further check*/
+					system_can_yield = 1;
+					// IPC AP->NP to acquire wakelock
+					system_np_wakelock = 1;
+					np_wakelock_acquire();
+					rtw_delete_task(&np_wakelock_acquire_handler);
+					// Switch status back to normal mode after wake up from interrupt
+					// pm_activity(PM_IDLE_DOMAIN, 10);
+					ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
+					// pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
+					// printf("Check the state 1 : %d\n", pm_checkstate(PM_IDLE_DOMAIN));
+					// printf("Check the state 2 : %d\n", pm_querystate(PM_IDLE_DOMAIN));
+					if (ret < 0) {
+						oldstate = PM_NORMAL;
+					}
+					else {
+						newstate = PM_NORMAL;
+					}
+					printf("Wakeup from Sleep!!\n");
+					sysdbg_print();
+					break;
 				}
-				/* need further check*/
-				system_can_yield = 1;
-				// IPC AP->NP to acquire wakelock
-				system_np_wakelock = 1;
-				np_wakelock_acquire();
-				rtw_delete_task(&np_wakelock_acquire_handler);
-				// Switch status back to normal mode after wake up from interrupt
-				ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
-				// pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
-				printf("Check the state 1 : %d\n", pm_checkstate(PM_IDLE_DOMAIN));
-				printf("Check the state 2 : %d\n", pm_querystate(PM_IDLE_DOMAIN));
-				if (ret < 0) {
-					oldstate = PM_NORMAL;
-				}
-				printf("Wakeup from Sleep!!\n");
-				break;
-
-			default:
-				break;
-		}
-		//TODO: Handle critical section access logic for SMP case in 8730E?
-		//Is leave_critical_section required? In accordance with irqsave()^
+				default:
+					break;
+			}
+			//TODO: Handle critical section access logic for SMP case in 8730E?
+			//Is leave_critical_section required? In accordance with irqsave()^
 #if ( configNUM_CORES > 1 )
 		up_irq_enable();
 #endif
+	}
+EXIT2:
+	if(oldstate == PM_STANDBY && newstate != PM_SLEEP) {
+		np_wakelock_acquire();
+		rtw_delete_task(&np_wakelock_acquire_handler);
+		system_np_wakelock = 1;
 	}
 }
 #else

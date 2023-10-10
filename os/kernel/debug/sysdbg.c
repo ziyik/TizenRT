@@ -54,7 +54,7 @@ static int sysdbg_close(FAR struct file *filep);
 static ssize_t sysdbg_write(FAR struct file *filep, FAR const char *buffer, size_t buflen);
 static void sysdbg_monitor_enable(void);
 static void sysdbg_monitor_disable(void);
-static void sysdbg_print(void);
+void sysdbg_print(void);
 
 #ifdef CONFIG_TASK_SCHED_HISTORY
 static void update_maxtask_count(int count);
@@ -298,7 +298,7 @@ static int sysdbg_close(FAR struct file *filep)
  *
  ****************************************************************************/
 
-static void sysdbg_print(void)
+void sysdbg_print(void)
 {
 #if defined(CONFIG_TASK_SCHED_HISTORY) || defined(CONFIG_IRQ_SCHED_HISTORY) || defined(CONFIG_SEMAPHORE_HISTORY)
 	uint32_t idx = 0;
