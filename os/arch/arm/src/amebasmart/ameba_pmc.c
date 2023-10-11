@@ -229,4 +229,17 @@ void SOCPS_SleepCG(void)
 	//pmu_acquire_wakelock(PMU_OS);
 }
 
-
+void SOCPS_Tune_APFreq(u8 val)
+{
+	/* Please refer to sysreg_hsys.h */
+	// AP_CLK_DIV1		0
+	// AP_CLK_DIV2		1
+	// AP_CLK_DIV3		2
+	// AP_CLK_DIV4		3
+	u32 reg_div = 0;
+	/* Div clock speed by input val */
+	reg_div = HAL_READ32(SYSTEM_CTRL_BASE_HP, REG_HSYS_HP_CKSL);
+	reg_div &= ~HSYS_MASK_CKD_AP;
+	reg_div |= HSYS_CKD_AP(val);
+	HAL_WRITE32(SYSTEM_CTRL_BASE_HP, REG_HSYS_HP_CKSL, reg_div);
+}
