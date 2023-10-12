@@ -221,7 +221,7 @@ void pm_update(int domain, int16_t accum)
 
 	Y = accum;
 #endif
-
+	// lldbg("\n[%s] - %d, pdom->state = %d, Y = %d\n",__FUNCTION__,__LINE__, pdom->state, Y);
 	/* First check if increased activity should cause us to return to the
 	 * normal operating state.  This would be unlikely for the lowest power
 	 * consumption states because the CPU is probably asleep.  However this
@@ -286,7 +286,7 @@ void pm_update(int domain, int16_t accum)
 					/* Yes, recommend the new state and set up for the next
 					 * transition.
 					 */
-
+				lldbg("\n[%s] - %d, pdom->btime = %8lld, pdom->stime = %8lld, clock_systimer = %8lld\n",__FUNCTION__,__LINE__, pdom->btime, pdom->stime, clock_systimer());
 				pdom->btime       = clock_systimer();
 				pdom->recommended = nextstate;
 			}

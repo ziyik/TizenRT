@@ -82,6 +82,8 @@ static void pm_timer_cb(int argc, wdparm_t arg1, ...)
 	/* Do nothing here, cause we only need TIMER ISR to wake up PM,
 	 * for deceasing PM state.
 	 */
+	// lldbg("\n[%s] - %d, checkstate = %d\n",__FUNCTION__,__LINE__, pm_checkstate(PM_IDLE_DOMAIN));
+	lldbg("\n[%s] - %d, currstate = %d\n",__FUNCTION__,__LINE__, pm_querystate(PM_IDLE_DOMAIN));
 }
 
 /****************************************************************************
@@ -109,15 +111,20 @@ static void pm_timer(int domain)
 	};
 
 	if (!pdom->wdog) {
+		lldbg("\n[%s] - %d\n",__FUNCTION__,__LINE__);
 		pdom->wdog = wd_create();
 	}
 
 	if (pdom->state < PM_SLEEP && !pdom->stay[pdom->state] && pmtick[pdom->state]) {
 		int delay = pmtick[pdom->state] + pdom->btime - clock_systimer();
 		int left  = wd_gettime(pdom->wdog);
-
+		lldbg("\n[%s] - %d, delay = %d, left = %d, pdom->btime = %8lld, pdom->stime = %8lld, clock_systimer = %8lld\n",__FUNCTION__,__LINE__, delay, left, pdom->btime, pdom->stime, clock_systimer());
+		if (delay <= 0) {
+			delay = 1;
+		}
 		if (!WDOG_ISACTIVE(pdom->wdog) || abs(delay - left) > PM_TIMER_GAP) {
 			wd_start(pdom->wdog, delay, (wdentry_t)pm_timer_cb, 0);
+			lldbg("\n[%s] - %d\n",__FUNCTION__,__LINE__);
 		}
 	} else {
 		wd_cancel(pdom->wdog);
@@ -263,7 +270,7 @@ static inline void pm_changeall(int domain, enum pm_state_e newstate)
 int pm_changestate(int domain_indx, enum pm_state_e newstate)
 {
 	irqstate_t flags;
-	int ret;
+	int ret = -1;
 
 	DEBUGASSERT(domain_indx >= 0 && domain_indx < CONFIG_PM_NDOMAINS);
 
@@ -278,17 +285,18 @@ int pm_changestate(int domain_indx, enum pm_state_e newstate)
 	/* First, prepare the drivers for the state change.  In this phase,
 	 * drivers may refuse the state state change.
 	 */
+	if (newstate != PM_RESTORE) {
+		ret = pm_prepall(domain_indx, newstate);
+		if (ret != OK) {
+			/* One or more drivers is not ready for this state change.  Revert to
+			* the preceding state.
+			*/
 
-	ret = pm_prepall(domain_indx, newstate);
-	if (ret != OK) {
-		/* One or more drivers is not ready for this state change.  Revert to
-		 * the preceding state.
-		 */
-
-		newstate = g_pmglobals.domain[domain_indx].state;
-		(void)pm_prepall(domain_indx, newstate);
+			newstate = g_pmglobals.domain[domain_indx].state;
+			lldbg("\n[%s] - %d, newstate = %d\n",__FUNCTION__,__LINE__, newstate);
+			(void)pm_prepall(domain_indx, newstate);
+		}
 	}
-
 	/* All drivers have agreed to the state change (or, one or more have
 	 * disagreed and the state has been reverted).  Set the new state.
 	 */
@@ -324,6 +332,7 @@ int pm_changestate(int domain_indx, enum pm_state_e newstate)
 
 enum pm_state_e pm_querystate(int domain)
 {
+	DEBUGASSERT(domain >= 0 && domain < CONFIG_PM_NDOMAINS);
 	return g_pmglobals.domain[domain].state;
 }
 

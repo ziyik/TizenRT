@@ -25,7 +25,9 @@
 #include <tinyara/config.h>
 
 // #include <tinyara/arch.h>
-#include "../../include/armv7-a/irq.h"
+#include <tinyara/arch.h>
+#include <tinyara/irq.h>
+// #include "../../include/armv7-a/irq.h"
 #include "arm_internal.h"
 
 #ifdef CONFIG_PM
@@ -109,15 +111,15 @@ static void set_timer_interrupt(u32 TimerIdx, u32 Timercnt) {
 						(u32)pTIM_InitStruct_temp);
 	RTIM_INTConfig(TIMx[TimerIdx], TIM_IT_Update, ENABLE);
 	RTIM_Cmd(TIMx[TimerIdx], ENABLE);
-	printf("hs Timer %x cnt %d\n", (WAKE_SRC_Timer0 << TimerIdx), Timercnt);
-	SOCPS_SetAPWakeEvent_MSK0((WAKE_SRC_Timer0 << TimerIdx), ENABLE);
+	printf("hs Timer %x cnt %d\n", (WAKE_SRC_Timer1 << TimerIdx), Timercnt);
+	SOCPS_SetAPWakeEvent_MSK0((WAKE_SRC_Timer1 << TimerIdx), ENABLE);
 }
 
-bool set_interrupt_count = 0;
+bool set_interrupt_count = 1;
+static enum pm_state_e oldstate = PM_NORMAL;
 #ifdef CONFIG_PM
 static void up_idlepm(void)
 {
-	static enum pm_state_e oldstate = PM_NORMAL;
 	uint32_t xModifiableIdleTime = 0;
 	enum pm_state_e newstate;
 	irqstate_t flags;
@@ -139,6 +141,7 @@ static void up_idlepm(void)
 		ret = pm_changestate(PM_IDLE_DOMAIN, newstate);
 		if (ret < 0) {
 			/* The new state change failed, revert to the preceding state */
+			printf("\n[%s] - %d\n",__FUNCTION__,__LINE__);
 			(void)pm_changestate(PM_IDLE_DOMAIN, oldstate);
 			newstate = oldstate;
 			goto EXIT2;
@@ -151,9 +154,10 @@ static void up_idlepm(void)
 		switch (newstate) {
 			case PM_NORMAL:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
+				break;
 			case PM_IDLE:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
-				sysdbg_print();
+				// sysdbg_print();
 				break;
 			case PM_STANDBY:
 				if(system_np_wakelock) {
@@ -165,7 +169,7 @@ static void up_idlepm(void)
 				break;
 			case PM_SLEEP:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
-				sysdbg_print();
+				// sysdbg_print();
 				if(!set_interrupt_count) {
 					/* need further check*/
 					system_can_yield = 0;
@@ -175,7 +179,6 @@ static void up_idlepm(void)
 					if (up_cpu_index() == 0) {
 						/* mask sys tick interrupt*/
 						arm_arch_timer_int_mask(1);
-						// up_timer_detach();
 						flags = irqsave();
 						if (tizenrt_ready_to_sleep()) {
 // Consider for dual core condition
@@ -228,7 +231,6 @@ EXIT:
 #endif				
 						/* Re-enable interrupts and sys tick*/
 						up_irq_enable();
-						// irqrestore(flags);
 					}
 					else if (up_cpu_index() == 1) {
 						if (pmu_get_sleep_type() == SLEEP_PG) {
@@ -253,23 +255,31 @@ EXIT:
 					np_wakelock_acquire();
 					rtw_delete_task(&np_wakelock_acquire_handler);
 					// Switch status back to normal mode after wake up from interrupt
-					// pm_activity(PM_IDLE_DOMAIN, 10);
-					ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
-					// pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
-					// printf("Check the state 1 : %d\n", pm_checkstate(PM_IDLE_DOMAIN));
+					pm_activity(PM_IDLE_DOMAIN, 9);
+					printf("Check the state 1 : %d\n", pm_checkstate(PM_IDLE_DOMAIN));
+					// ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
+					pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
 					// printf("Check the state 2 : %d\n", pm_querystate(PM_IDLE_DOMAIN));
-					if (ret < 0) {
-						oldstate = PM_NORMAL;
-					}
-					else {
-						newstate = PM_NORMAL;
-					}
+					// if (ret < 0) {
+					// 	oldstate = PM_NORMAL;
+					// }
+					// else {
+					// 	newstate = PM_NORMAL;
+					// }
 					printf("Wakeup from Sleep!!\n");
-					sysdbg_print();
-					break;
+					// sysdbg_print();
 				}
-				default:
-					break;
+				system_np_wakelock = 1;
+				np_wakelock_acquire();
+				rtw_delete_task(&np_wakelock_acquire_handler);
+				ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
+				// printf("Changing state back to normal!!!, recommended state = %d\n", pm_checkstate(PM_IDLE_DOMAIN));
+				if (ret < 0) {
+					oldstate = PM_NORMAL;
+				}
+				break;
+			default:
+				break;
 			}
 			//TODO: Handle critical section access logic for SMP case in 8730E?
 			//Is leave_critical_section required? In accordance with irqsave()^
