@@ -101,7 +101,7 @@ static void pm_timer_cb(int argc, wdparm_t arg1, ...)
  *
  ****************************************************************************/
 
-static void pm_timer(int domain)
+static void pm_timer(int domain, enum pm_state_e newstate)
 {
 	FAR struct pm_domain_s *pdom = &g_pmglobals.domain[domain];
 	static const int pmtick[3] = {
@@ -109,6 +109,11 @@ static void pm_timer(int domain)
 		TIME_SLICE_TICKS * CONFIG_PM_STANDBYENTER_COUNT,
 		TIME_SLICE_TICKS * CONFIG_PM_SLEEPENTER_COUNT
 	};
+
+	if (pdom->state == newstate && pdom->wdog) {
+		(void)wd_delete(pdom->wdog);
+		pdom->wdog = NULL;
+	}
 
 	if (!pdom->wdog) {
 		lldbg("\n[%s] - %d\n",__FUNCTION__,__LINE__);
@@ -283,7 +288,7 @@ int pm_changestate(int domain_indx, enum pm_state_e newstate)
 	flags = irqsave();
 
 	/* First, prepare the drivers for the state change.  In this phase,
-	 * drivers may refuse the state state change.
+	 * drivers may refuse the state change.
 	 */
 	if (newstate != PM_RESTORE) {
 		ret = pm_prepall(domain_indx, newstate);
@@ -293,25 +298,20 @@ int pm_changestate(int domain_indx, enum pm_state_e newstate)
 			*/
 
 			newstate = g_pmglobals.domain[domain_indx].state;
-			lldbg("\n[%s] - %d, newstate = %d\n",__FUNCTION__,__LINE__, newstate);
-			(void)pm_prepall(domain_indx, newstate);
+			pm_changeall(domain_indx, newstate);
+			goto EXIT;
 		}
-	}
-	/* All drivers have agreed to the state change (or, one or more have
-	 * disagreed and the state has been reverted).  Set the new state.
-	 */
-
-	pm_changeall(domain_indx, newstate);
-	if (newstate != PM_RESTORE) {
+		/* All drivers have agreed to the state change (or, one or more have
+		* disagreed and the state has been reverted).  Set the new state.
+		*/
+		pm_changeall(domain_indx, newstate);
 		g_pmglobals.domain[domain_indx].state = newstate;
 
-		/* Start PM timer to decrease PM state */
-
-		pm_timer(domain_indx);
 	}
-
+EXIT:
+	/* Start PM timer to decrease PM state */
+	pm_timer(domain_indx, newstate);
 	/* Restore the interrupt state */
-
 	irqrestore(flags);
 	return ret;
 }
