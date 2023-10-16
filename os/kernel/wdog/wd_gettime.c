@@ -118,6 +118,7 @@ int wd_gettime(WDOG_ID wdog)
 		int delay = 0;
 
 		for (curr = (FAR struct wdog_s *)g_wdactivelist.head; curr; curr = curr->next) {
+			lldbg("\n[%s] - %d, curr->lag = %d\n",__FUNCTION__,__LINE__, curr->lag);
 			delay += curr->lag;
 			if (curr == wdog) {
 				irqrestore(flags);
@@ -130,7 +131,7 @@ int wd_gettime(WDOG_ID wdog)
 	return 0;
 }
 
-#ifdef CONFIG_SCHED_TICKSUPPRESS
+// #ifdef CONFIG_SCHED_TICKSUPPRESS
 /********************************************************************************
  * Name: wd_getdelay
  *
@@ -152,4 +153,4 @@ int wd_getdelay(void)
 {
 	return (g_wdactivelist.head) ? ((FAR struct wdog_s *)g_wdactivelist.head)->lag : 0;
 }
-#endif
+// #endif

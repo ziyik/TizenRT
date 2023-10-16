@@ -307,6 +307,7 @@ void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time)
 	g_system_timer += (u64)ms_passed;
 	printf("\ng_system_timer after compensation: %8lld\n", g_system_timer);
 	irqrestore(flags);
+	wd_timer_nohz(ms_passed);
 #endif
 
 	sysactive_timeout_flag = 0;

@@ -77,6 +77,7 @@
  * Private Functions
  ****************************************************************************/
 
+extern void arm_dumpstate(void);
 static void pm_timer_cb(int argc, wdparm_t arg1, ...)
 {
 	/* Do nothing here, cause we only need TIMER ISR to wake up PM,
@@ -84,6 +85,8 @@ static void pm_timer_cb(int argc, wdparm_t arg1, ...)
 	 */
 	// lldbg("\n[%s] - %d, checkstate = %d\n",__FUNCTION__,__LINE__, pm_checkstate(PM_IDLE_DOMAIN));
 	lldbg("\n[%s] - %d, currstate = %d\n",__FUNCTION__,__LINE__, pm_querystate(PM_IDLE_DOMAIN));
+	sysdbg_print();
+	arm_dumpstate();
 }
 
 /****************************************************************************

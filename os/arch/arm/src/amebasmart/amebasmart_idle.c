@@ -23,19 +23,14 @@
  ****************************************************************************/
 
 #include <tinyara/config.h>
-
-// #include <tinyara/arch.h>
 #include <tinyara/arch.h>
 #include <tinyara/irq.h>
-// #include "../../include/armv7-a/irq.h"
 #include "arm_internal.h"
 
 #ifdef CONFIG_PM
 #include <tinyara/pm/pm.h>
 #include "amebasmart_config.h"
 #include "arch_timer.h"
-//For reference to up_rtc_gettime() and up_rtc_time()
-// #include "amebasmart_rtc.h"
 #include "ameba_soc.h"
 #include "osdep_service.h"
 #endif
@@ -46,6 +41,7 @@
 
 static u32 system_can_yield = 1;
 static bool system_np_wakelock = 1;
+static int delay = 0;
 extern void sysdbg_print(void);
 /****************************************************************************
  * Name: up_idlepm
@@ -70,18 +66,21 @@ static void np_wakelock_acquire(void) {
 }
 
 RTIM_TimeBaseInitTypeDef TIM_InitStruct_GT[8];
-static void pg_timer_int_handler(u32 Data)
+static void pg_timer_int_handler(void)
 {
 
-	RTIM_TimeBaseInitTypeDef *TIM_InitStruct = (RTIM_TimeBaseInitTypeDef *) Data;
-	printf("pg Ap timer handler\n");
-	printf("WAK_Event0 = %x 1=%x\n", HAL_READ32(PMC_BASE, WAK_STATUS0), HAL_READ32(PMC_BASE, WAK_STATUS1));
+	// RTIM_TimeBaseInitTypeDef *TIM_InitStruct = (RTIM_TimeBaseInitTypeDef *) Data;
+	DiagPrintf("pg Ap timer handler\n");
+	DiagPrintf("WAK_Event0 = %x 1=%x\n", HAL_READ32(PMC_BASE, WAK_STATUS0), HAL_READ32(PMC_BASE, WAK_STATUS1));
 
-	RTIM_INTClear(TIMx[TIM_InitStruct->TIM_Idx]);
+	RTIM_INTClear(TIMx[1]);
 
-	printf("WAK_Event0 = %x 1=%x\n", HAL_READ32(PMC_BASE, WAK_STATUS0), HAL_READ32(PMC_BASE, WAK_STATUS1));
-	RTIM_Cmd(TIMx[TIM_InitStruct->TIM_Idx], DISABLE);
+	DiagPrintf("WAK_Event0 = %x 1=%x\n", HAL_READ32(PMC_BASE, WAK_STATUS0), HAL_READ32(PMC_BASE, WAK_STATUS1));
+	RTIM_Cmd(TIMx[1], DISABLE);
+	// Switch status back to normal mode after wake up from interrupt
+	pm_activity(PM_IDLE_DOMAIN, 9);
 
+	// wd_timer_nohz(delay);
 }
 
 static void set_timer_interrupt(u32 TimerIdx, u32 Timercnt) {
@@ -111,11 +110,12 @@ static void set_timer_interrupt(u32 TimerIdx, u32 Timercnt) {
 						(u32)pTIM_InitStruct_temp);
 	RTIM_INTConfig(TIMx[TimerIdx], TIM_IT_Update, ENABLE);
 	RTIM_Cmd(TIMx[TimerIdx], ENABLE);
+
 	printf("hs Timer %x cnt %d\n", (WAKE_SRC_Timer1 << TimerIdx), Timercnt);
 	SOCPS_SetAPWakeEvent_MSK0((WAKE_SRC_Timer1 << TimerIdx), ENABLE);
 }
 
-bool set_interrupt_count = 1;
+bool set_interrupt_count = 0;
 static enum pm_state_e oldstate = PM_NORMAL;
 #ifdef CONFIG_PM
 static void up_idlepm(void)
@@ -137,7 +137,13 @@ static void up_idlepm(void)
 	  	printf("newstate= %d oldstate=%d\n", newstate, oldstate);
 
 		/* Then force the global state change */
-
+		// Check this part, if this condition is added, pm_timer_cb will not be triggered
+		// if (newstate == PM_NORMAL && oldstate == PM_SLEEP) {
+		// 	oldstate = PM_NORMAL;
+		// 	newstate = PM_IDLE;
+		// 	pm_changestate(PM_IDLE_DOMAIN, newstate);
+		// }
+		// else {
 		ret = pm_changestate(PM_IDLE_DOMAIN, newstate);
 		if (ret < 0) {
 			/* The new state change failed, revert to the preceding state */
@@ -149,11 +155,12 @@ static void up_idlepm(void)
 			/* Save the new state */
 			oldstate = newstate;
 		}
-
+		// }
 		/* MCU-specific power management logic */
 		switch (newstate) {
 			case PM_NORMAL:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
+				// sysdbg_print();
 				break;
 			case PM_IDLE:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
@@ -169,6 +176,7 @@ static void up_idlepm(void)
 				break;
 			case PM_SLEEP:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
+				// set_timer_interrupt(1, 5);
 				// sysdbg_print();
 				if(!set_interrupt_count) {
 					/* need further check*/
@@ -179,6 +187,9 @@ static void up_idlepm(void)
 					if (up_cpu_index() == 0) {
 						/* mask sys tick interrupt*/
 						arm_arch_timer_int_mask(1);
+						up_timer_disable();
+						delay = wd_getdelay();
+						printf("\n[%s] - %d, delay = %d\n",__FUNCTION__,__LINE__, delay);
 						flags = irqsave();
 						if (tizenrt_ready_to_sleep()) {
 // Consider for dual core condition
@@ -209,9 +220,11 @@ static void up_idlepm(void)
 							// Interrupt source from BT/UART will wake cpu up, just leave expected idle time as 0
 							// Enter sleep mode for AP
 							configPRE_SLEEP_PROCESSING(xModifiableIdleTime);
+							pg_timer_int_handler();
 							/* When wake from pg, arm timer has been reset, so a new compare value is necessary to
 							trigger an timer interrupt */
 							if (pmu_get_sleep_type() == SLEEP_PG) {
+								up_timer_enable();
 								arm_arch_timer_set_compare(arm_arch_timer_count() + 50000);
 								// up_timer_attach();
 								printf("\n[%s] - %d, welcome back~!\n",__FUNCTION__,__LINE__);
@@ -254,29 +267,27 @@ EXIT:
 					system_np_wakelock = 1;
 					np_wakelock_acquire();
 					rtw_delete_task(&np_wakelock_acquire_handler);
-					// Switch status back to normal mode after wake up from interrupt
-					pm_activity(PM_IDLE_DOMAIN, 9);
-					printf("Check the state 1 : %d\n", pm_checkstate(PM_IDLE_DOMAIN));
-					// ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
-					pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
+					// printf("Check the state 1 : %d\n", pm_checkstate(PM_IDLE_DOMAIN));
+					ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
+					// pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
 					// printf("Check the state 2 : %d\n", pm_querystate(PM_IDLE_DOMAIN));
-					// if (ret < 0) {
-					// 	oldstate = PM_NORMAL;
-					// }
+					if (ret < 0) {
+						oldstate = PM_NORMAL;
+					}
 					// else {
 					// 	newstate = PM_NORMAL;
 					// }
 					printf("Wakeup from Sleep!!\n");
 					// sysdbg_print();
 				}
-				system_np_wakelock = 1;
-				np_wakelock_acquire();
-				rtw_delete_task(&np_wakelock_acquire_handler);
-				ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
-				// printf("Changing state back to normal!!!, recommended state = %d\n", pm_checkstate(PM_IDLE_DOMAIN));
-				if (ret < 0) {
-					oldstate = PM_NORMAL;
-				}
+				// system_np_wakelock = 1;
+				// np_wakelock_acquire();
+				// rtw_delete_task(&np_wakelock_acquire_handler);
+				// ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
+				// // printf("Changing state back to normal!!!, recommended state = %d\n", pm_checkstate(PM_IDLE_DOMAIN));
+				// if (ret < 0) {
+				// 	oldstate = PM_NORMAL;
+				// }
 				break;
 			default:
 				break;

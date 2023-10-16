@@ -173,7 +173,7 @@
 #define	AMEBASMART_IRQ_TIMER12			(AMEBASMART_IRQ_FIRST +  80)
 #define	AMEBASMART_IRQ_TIMER13			(AMEBASMART_IRQ_FIRST +  81)
 
-#define NR_IRQS                 130  /* Total number of interrupts */
+#define NR_IRQS                 128  /* Total number of interrupts */
 
 /****************************************************************************
  * Public Types

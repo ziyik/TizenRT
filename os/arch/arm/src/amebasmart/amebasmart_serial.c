@@ -1205,7 +1205,9 @@ static void amebasmart_serial_pmnotify(FAR struct pm_callback_s *cb, int domain,
 		case PM_NORMAL:
 		case PM_IDLE:
 		case PM_STANDBY:
+			break;
 		case PM_SLEEP:
+			break;
 		default:
 			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
 			break;

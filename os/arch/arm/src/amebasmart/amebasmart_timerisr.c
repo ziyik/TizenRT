@@ -133,3 +133,13 @@ void up_timer_initialize(void)
   up_prioritize_irq(ARM_ARCH_TIMER_IRQ, 224);
   up_enable_irq(ARM_ARCH_TIMER_IRQ);
 }
+
+void up_timer_disable(void)
+{
+  arm_arch_timer_enable(0);
+}
+
+void up_timer_enable(void)
+{
+  arm_arch_timer_enable(1);
+}
