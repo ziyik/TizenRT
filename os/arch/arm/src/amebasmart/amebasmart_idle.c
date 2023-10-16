@@ -137,8 +137,14 @@ static void up_idlepm(void)
 		ret = pm_changestate(PM_IDLE_DOMAIN, newstate);
 		if (ret < 0) {
 			/* The new state change failed, revert to the preceding state */
-			printf("\n[%s] - %d\n",__FUNCTION__,__LINE__);
-			(void)pm_changestate(PM_IDLE_DOMAIN, oldstate);
+			printf("Changestate failed!\n[%s] - %d\n",__FUNCTION__,__LINE__);
+
+			/* [AMOGH HASSIJA] I propose a slight change in logic: -
+			 * If changestate fails, then prepall() has failed, because changeall() does not return anything
+			 * We revert prepall() within changestate itself if it fails for new state
+			 * Hence, we don't need to change back to oldstate here
+			 */
+			//(void)pm_changestate(PM_IDLE_DOMAIN, oldstate);
 			newstate = oldstate;
 			goto EXIT2;
 		} else {
@@ -149,9 +155,11 @@ static void up_idlepm(void)
 		switch (newstate) {
 			case PM_NORMAL:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
+
 				break;
 			case PM_IDLE:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
+
 				break;
 			case PM_STANDBY:
 				if(system_np_wakelock) {
@@ -159,16 +167,21 @@ static void up_idlepm(void)
 					rtw_delete_task(&np_wakelock_release_handler);
 					system_np_wakelock = 0;
 				}
+
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
+
 				break;
 			case PM_SLEEP:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
+
 				if(!set_interrupt_count) {
 					/* need further check, for SMP case*/
 					system_can_yield = 0;
-					// set interrupt source
+
+					/* set interrupt source */
 					set_timer_interrupt(1, 5);
 					set_interrupt_count = 1;
+
 					if (up_cpu_index() == 0) {
 						/* mask sys tick interrupt*/
 						arm_arch_timer_int_mask(1);
@@ -200,12 +213,15 @@ static void up_idlepm(void)
 								}
 							}
 #endif
-							// Interrupt source from BT/UART will wake cpu up, just leave expected idle time as 0
-							// Enter sleep mode for AP
+							/* Interrupt source from BT/UART will wake cpu up, just leave expected idle time as 0
+							 * Enter sleep mode for AP
+							 */
 							configPRE_SLEEP_PROCESSING(xModifiableIdleTime);
 							pg_timer_int_handler();
+
 							/* When wake from pg, arm timer has been reset, so a new compare value is necessary to
-							trigger an timer interrupt */
+							 * trigger an timer interrupt
+							 */
 							if (pmu_get_sleep_type() == SLEEP_PG) {
 								up_timer_enable();
 								arm_arch_timer_set_compare(arm_arch_timer_count() + 50000);
@@ -243,12 +259,14 @@ EXIT:
 						__asm("	ISB");
 						up_irq_enable();
 					}
-					/* need further check*/
+					/* need further check */
 					system_can_yield = 1;
-					// IPC AP->NP to acquire wakelock
+
+					/* IPC AP->NP to acquire wakelock */
 					system_np_wakelock = 1;
 					np_wakelock_acquire();
 					rtw_delete_task(&np_wakelock_acquire_handler);
+
 					ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
 					if (ret < 0) {
 						oldstate = PM_NORMAL;

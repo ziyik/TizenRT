@@ -77,7 +77,8 @@
  * Private Functions
  ****************************************************************************/
 
-extern void arm_dumpstate(void);
+// [AMOGH HASSIJA] This should not be needed now
+//extern void arm_dumpstate(void);
 static void pm_timer_cb(int argc, wdparm_t arg1, ...)
 {
 	/* Do nothing here, cause we only need TIMER ISR to wake up PM,
@@ -109,10 +110,11 @@ static void pm_timer(int domain, enum pm_state_e newstate)
 		TIME_SLICE_TICKS * CONFIG_PM_SLEEPENTER_COUNT
 	};
 
-	if (pdom->state == newstate && pdom->wdog) {
-		(void)wd_delete(pdom->wdog);
-		pdom->wdog = NULL;
-	}
+	/* [AMOGH HASSIJA] This manual reset of wdog should not be needed now */
+	//if (pdom->state == newstate && pdom->wdog) {
+	//	(void)wd_delete(pdom->wdog);
+	//	pdom->wdog = NULL;
+	//}
 
 	if (!pdom->wdog) {
 		pdom->wdog = wd_create();
@@ -122,9 +124,11 @@ static void pm_timer(int domain, enum pm_state_e newstate)
 		int delay = pmtick[pdom->state] + pdom->btime - clock_systimer();
 		int left  = wd_gettime(pdom->wdog);
 		lldbg("\n[%s] - %d, delay = %d, left = %d, pdom->btime = %8lld, pdom->stime = %8lld, clock_systimer = %8lld\n",__FUNCTION__,__LINE__, delay, left, pdom->btime, pdom->stime, clock_systimer());
+		/* [AMOGH HASSIJA] Can you explain the reason for adding the 'if' conditional below? */
 		if (delay <= 0) {
 			delay = 1;
 		}
+
 		if (!WDOG_ISACTIVE(pdom->wdog) || abs(delay - left) > PM_TIMER_GAP) {
 			wd_start(pdom->wdog, delay, (wdentry_t)pm_timer_cb, 0);
 		}
@@ -271,6 +275,7 @@ static inline void pm_changeall(int domain, enum pm_state_e newstate)
 
 int pm_changestate(int domain_indx, enum pm_state_e newstate)
 {
+	FAR struct pm_domain_s *pdom;
 	irqstate_t flags;
 	int ret = -1;
 
@@ -281,7 +286,6 @@ int pm_changestate(int domain_indx, enum pm_state_e newstate)
 	 * state change.  When the state change is complete, interrupts will be
 	 * re-enabled.
 	 */
-
 	flags = irqsave();
 
 	/* First, prepare the drivers for the state change.  In this phase,
@@ -290,26 +294,35 @@ int pm_changestate(int domain_indx, enum pm_state_e newstate)
 	if (newstate != PM_RESTORE) {
 		ret = pm_prepall(domain_indx, newstate);
 		if (ret != OK) {
-			/* One or more drivers is not ready for this state change.  Revert to
+			/* One or more drivers is not ready for this state change. Revert to
 			* the preceding state.
 			*/
-
 			newstate = g_pmglobals.domain[domain_indx].state;
-			pm_changeall(domain_indx, newstate);
+
+			/* Revert the preparation to the old state to retain it */
+			pm_prepall(domain_indx, newstate);
+
+			/* Set the recommended state for the domain to the current state, the recommendation will change
+			 * automatically as per PM logic after a pre-specified delay time.
+			 */
+			g_pmglobals.domain[domain_indx].recommended = newstate;
+
 			goto EXIT;
 		}
+
 		/* All drivers have agreed to the state change (or, one or more have
-		* disagreed and the state has been reverted).  Set the new state.
-		*/
+		 * disagreed and the state has been reverted).  Set the new state.
+		 */
 		pm_changeall(domain_indx, newstate);
 		g_pmglobals.domain[domain_indx].state = newstate;
-
 	}
 EXIT:
 	/* Start PM timer to decrease PM state */
 	pm_timer(domain_indx, newstate);
+
 	/* Restore the interrupt state */
 	irqrestore(flags);
+
 	return ret;
 }
 
