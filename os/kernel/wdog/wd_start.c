@@ -161,7 +161,6 @@ static inline void wd_expiration(void)
 			up_setpicbase(wdog->picbase);
 			switch (wdog->argc) {
 			default:
-				lldbg("\n[%s] - %d\n",__FUNCTION__,__LINE__);
 				DEBUGPANIC();
 				break;
 
@@ -256,7 +255,6 @@ int wd_start(WDOG_ID wdog, int delay, wdentry_t wdentry, int argc, ...)
 
 	state = irqsave();
 	if (WDOG_ISACTIVE(wdog)) {
-		lldbg("\n[%s] - %d\n",__FUNCTION__,__LINE__);
 		wd_cancel(wdog);
 	}
 
@@ -366,9 +364,7 @@ int wd_start(WDOG_ID wdog, int delay, wdentry_t wdentry, int argc, ...)
 	}
 
 	/* Put the lag into the watchdog structure and mark it as active. */
-	// lldbg("\n[%s] - %d, wdog->lag before = %d\n",__FUNCTION__,__LINE__, wdog->lag);
 	wdog->lag = delay;
-	// lldbg("\n[%s] - %d, wdog->lag after = %d\n",__FUNCTION__,__LINE__, wdog->lag);
 	WDOG_SETACTIVE(wdog);
 
 #ifdef CONFIG_SCHED_TICKLESS

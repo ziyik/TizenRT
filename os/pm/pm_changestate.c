@@ -83,10 +83,6 @@ static void pm_timer_cb(int argc, wdparm_t arg1, ...)
 	/* Do nothing here, cause we only need TIMER ISR to wake up PM,
 	 * for deceasing PM state.
 	 */
-	// lldbg("\n[%s] - %d, checkstate = %d\n",__FUNCTION__,__LINE__, pm_checkstate(PM_IDLE_DOMAIN));
-	lldbg("\n[%s] - %d, currstate = %d\n",__FUNCTION__,__LINE__, pm_querystate(PM_IDLE_DOMAIN));
-	sysdbg_print();
-	arm_dumpstate();
 }
 
 /****************************************************************************
@@ -119,7 +115,6 @@ static void pm_timer(int domain, enum pm_state_e newstate)
 	}
 
 	if (!pdom->wdog) {
-		lldbg("\n[%s] - %d\n",__FUNCTION__,__LINE__);
 		pdom->wdog = wd_create();
 	}
 
@@ -132,7 +127,6 @@ static void pm_timer(int domain, enum pm_state_e newstate)
 		}
 		if (!WDOG_ISACTIVE(pdom->wdog) || abs(delay - left) > PM_TIMER_GAP) {
 			wd_start(pdom->wdog, delay, (wdentry_t)pm_timer_cb, 0);
-			lldbg("\n[%s] - %d\n",__FUNCTION__,__LINE__);
 		}
 	} else {
 		wd_cancel(pdom->wdog);

@@ -41,8 +41,6 @@
 
 static u32 system_can_yield = 1;
 static bool system_np_wakelock = 1;
-static int delay = 0;
-extern void sysdbg_print(void);
 /****************************************************************************
  * Name: up_idlepm
  *
@@ -80,7 +78,6 @@ static void pg_timer_int_handler(void)
 	// Switch status back to normal mode after wake up from interrupt
 	pm_activity(PM_IDLE_DOMAIN, 9);
 
-	// wd_timer_nohz(delay);
 }
 
 static void set_timer_interrupt(u32 TimerIdx, u32 Timercnt) {
@@ -137,13 +134,6 @@ static void up_idlepm(void)
 	  	printf("newstate= %d oldstate=%d\n", newstate, oldstate);
 
 		/* Then force the global state change */
-		// Check this part, if this condition is added, pm_timer_cb will not be triggered
-		// if (newstate == PM_NORMAL && oldstate == PM_SLEEP) {
-		// 	oldstate = PM_NORMAL;
-		// 	newstate = PM_IDLE;
-		// 	pm_changestate(PM_IDLE_DOMAIN, newstate);
-		// }
-		// else {
 		ret = pm_changestate(PM_IDLE_DOMAIN, newstate);
 		if (ret < 0) {
 			/* The new state change failed, revert to the preceding state */
@@ -155,16 +145,13 @@ static void up_idlepm(void)
 			/* Save the new state */
 			oldstate = newstate;
 		}
-		// }
 		/* MCU-specific power management logic */
 		switch (newstate) {
 			case PM_NORMAL:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
-				// sysdbg_print();
 				break;
 			case PM_IDLE:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
-				// sysdbg_print();
 				break;
 			case PM_STANDBY:
 				if(system_np_wakelock) {
@@ -176,10 +163,8 @@ static void up_idlepm(void)
 				break;
 			case PM_SLEEP:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
-				// set_timer_interrupt(1, 5);
-				// sysdbg_print();
 				if(!set_interrupt_count) {
-					/* need further check*/
+					/* need further check, for SMP case*/
 					system_can_yield = 0;
 					// set interrupt source
 					set_timer_interrupt(1, 5);
@@ -188,12 +173,10 @@ static void up_idlepm(void)
 						/* mask sys tick interrupt*/
 						arm_arch_timer_int_mask(1);
 						up_timer_disable();
-						delay = wd_getdelay();
-						printf("\n[%s] - %d, delay = %d\n",__FUNCTION__,__LINE__, delay);
 						flags = irqsave();
 						if (tizenrt_ready_to_sleep()) {
 // Consider for dual core condition
-#if ( configNUM_CORES > 1 )
+#ifdef CONFIG_SMP
 							/*PG flow */
 							if (pmu_get_sleep_type() == SLEEP_PG) {
 								/* CPU1 just come back from pg, so can't sleep here */
@@ -226,8 +209,6 @@ static void up_idlepm(void)
 							if (pmu_get_sleep_type() == SLEEP_PG) {
 								up_timer_enable();
 								arm_arch_timer_set_compare(arm_arch_timer_count() + 50000);
-								// up_timer_attach();
-								printf("\n[%s] - %d, welcome back~!\n",__FUNCTION__,__LINE__);
 							}
 							arm_arch_timer_int_mask(0);
 							configPOST_SLEEP_PROCESSING(xModifiableIdleTime);
@@ -239,12 +220,13 @@ static void up_idlepm(void)
 							__asm(" WFI");
 							__asm(" ISB");
 						}
-#if ( configNUM_CORES > 1 )
+#ifdef CONFIG_SMP
 EXIT:
 #endif				
 						/* Re-enable interrupts and sys tick*/
 						up_irq_enable();
 					}
+					// This case is consideration for secondary core
 					else if (up_cpu_index() == 1) {
 						if (pmu_get_sleep_type() == SLEEP_PG) {
 							if (tizenrt_ready_to_sleep()) {
@@ -267,36 +249,18 @@ EXIT:
 					system_np_wakelock = 1;
 					np_wakelock_acquire();
 					rtw_delete_task(&np_wakelock_acquire_handler);
-					// printf("Check the state 1 : %d\n", pm_checkstate(PM_IDLE_DOMAIN));
 					ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
-					// pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
-					// printf("Check the state 2 : %d\n", pm_querystate(PM_IDLE_DOMAIN));
 					if (ret < 0) {
 						oldstate = PM_NORMAL;
 					}
-					// else {
-					// 	newstate = PM_NORMAL;
-					// }
 					printf("Wakeup from Sleep!!\n");
-					// sysdbg_print();
 				}
-				// system_np_wakelock = 1;
-				// np_wakelock_acquire();
-				// rtw_delete_task(&np_wakelock_acquire_handler);
-				// ret = pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
-				// // printf("Changing state back to normal!!!, recommended state = %d\n", pm_checkstate(PM_IDLE_DOMAIN));
-				// if (ret < 0) {
-				// 	oldstate = PM_NORMAL;
-				// }
 				break;
 			default:
 				break;
-			}
+		}
 			//TODO: Handle critical section access logic for SMP case in 8730E?
 			//Is leave_critical_section required? In accordance with irqsave()^
-#if ( configNUM_CORES > 1 )
-		up_irq_enable();
-#endif
 	}
 EXIT2:
 	if(oldstate == PM_STANDBY && newstate != PM_SLEEP) {
