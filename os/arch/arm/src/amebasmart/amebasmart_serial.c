@@ -1285,11 +1285,11 @@ static int amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
 			}
 #endif
 #ifdef CONFIG_RTL8730E_UART4
-			// LOGUART_TypeDef *UARTLOG = LOGUART_DEV;
-			// if (!(UARTLOG->LOGUART_UART_LSR & LOG_UART_IDX_FLAG[2].empty)) {		/* log UART Tx Empty Check */
-			// 	printf("\n[%s] - %d, UARTLOG->LOGUART_UART_LSR = %d, LOG_UART_IDX_FLAG[2].empty = %d\n",__FUNCTION__,__LINE__, UARTLOG->LOGUART_UART_LSR, LOG_UART_IDX_FLAG[2].empty);
-			// 	return ERROR;
-			// }
+			LOGUART_TypeDef *UARTLOG = LOGUART_DEV;
+			if (!(UARTLOG->LOGUART_UART_LSR & LOG_UART_IDX_FLAG[2].empty)) {		/* log UART Tx Empty Check */
+				printf("\n[%s] - %d, UARTLOG->LOGUART_UART_LSR = %d, LOG_UART_IDX_FLAG[2].empty = %d\n",__FUNCTION__,__LINE__, UARTLOG->LOGUART_UART_LSR, LOG_UART_IDX_FLAG[2].empty);
+				return ERROR;
+			}
 #endif
 			break;
 		default:
@@ -1401,6 +1401,7 @@ int up_lowgetc(void)
 		return;
 	rxd = rtl8730e_up_receive(&CONSOLE_DEV, &rxd);
 #endif
+	printf("%c", rxd & 0xff);
 	return rxd & 0xff;
 }
 

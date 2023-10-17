@@ -100,7 +100,7 @@ static void pm_timer_cb(int argc, wdparm_t arg1, ...)
  *
  ****************************************************************************/
 
-static void pm_timer(int domain, enum pm_state_e newstate)
+static void pm_timer(int domain)
 {
 	FAR struct pm_domain_s *pdom = &g_pmglobals.domain[domain];
 	static const int pmtick[3] = {
@@ -108,11 +108,6 @@ static void pm_timer(int domain, enum pm_state_e newstate)
 		TIME_SLICE_TICKS * CONFIG_PM_STANDBYENTER_COUNT,
 		TIME_SLICE_TICKS * CONFIG_PM_SLEEPENTER_COUNT
 	};
-
-	if (pdom->state == newstate && pdom->wdog) {
-		(void)wd_delete(pdom->wdog);
-		pdom->wdog = NULL;
-	}
 
 	if (!pdom->wdog) {
 		pdom->wdog = wd_create();
@@ -271,6 +266,7 @@ static inline void pm_changeall(int domain, enum pm_state_e newstate)
 
 int pm_changestate(int domain_indx, enum pm_state_e newstate)
 {
+	FAR struct pm_domain_s *pdom = &g_pmglobals.domain[domain_indx];
 	irqstate_t flags;
 	int ret = -1;
 
@@ -294,20 +290,21 @@ int pm_changestate(int domain_indx, enum pm_state_e newstate)
 			* the preceding state.
 			*/
 
-			newstate = g_pmglobals.domain[domain_indx].state;
-			pm_changeall(domain_indx, newstate);
+			newstate = pdom->state;
+			pm_prepall(domain_indx, newstate);
+			pdom->recommended = newstate;
 			goto EXIT;
 		}
 		/* All drivers have agreed to the state change (or, one or more have
 		* disagreed and the state has been reverted).  Set the new state.
 		*/
 		pm_changeall(domain_indx, newstate);
-		g_pmglobals.domain[domain_indx].state = newstate;
+		pdom->state = newstate;
 
 	}
 EXIT:
 	/* Start PM timer to decrease PM state */
-	pm_timer(domain_indx, newstate);
+	pm_timer(domain_indx);
 	/* Restore the interrupt state */
 	irqrestore(flags);
 	return ret;
