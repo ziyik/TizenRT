@@ -237,6 +237,11 @@ struct rtl8730e_up_dev_s {
 	uint8_t oflow:1;			/* output flow control (CTS) enabled */
 #endif
 	uint8_t tx_level;
+  	/* Has been initialized and HW is setup. */
+  	bool              initialized;
+#ifdef CONFIG_PM
+  	bool              suspended; /* UART device has been suspended. */
+#endif
 };
 
 /****************************************************************************
@@ -274,6 +279,8 @@ static bool rtl8730e_up_txready(struct uart_dev_s *dev);
 static bool rtl8730e_up_txempty(struct uart_dev_s *dev);
 
 #ifdef CONFIG_PM
+static void amebasmart_serial_setsuspend(struct uart_dev_s *dev, bool suspend, bool is_loguart);
+static void amebasmart_serial_pm_setsuspend(bool suspend);
 static void amebasmart_serial_pmnotify(FAR struct pm_callback_s *cb, int domain,
 										enum pm_state_e pmstate);
 static int  amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
@@ -848,6 +855,8 @@ static int rtl8730e_up_setup(struct uart_dev_s *dev)
 	DEBUGASSERT(!sdrv[uart_index_get(priv->tx)]);
 	sdrv[uart_index_get(priv->tx)] = (serial_t *)kmm_malloc(sizeof(serial_t));
 	DEBUGASSERT(sdrv[uart_index_get(priv->tx)]);
+	/* Mark device as initialized. */
+  	priv->initialized = true;
 #if (CONFIG_UART4_BAUD != 1500000)
 #error "Error Amebasmart UART4 works with fixed baud rate: 1,500,000. Please set it to 1500000 in the menuconfig"
 #endif
@@ -886,6 +895,7 @@ static int rtl8730e_up_setup_pin(struct uart_dev_s *dev)
 	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
 	DEBUGASSERT(priv);
 
+	priv->initialized = true;
 	serial_pin_init(priv->tx, priv->rx);
 	return OK;
 }
@@ -907,6 +917,8 @@ static void rtl8730e_up_shutdown(struct uart_dev_s *dev)
 	serial_free(sdrv[uart_index_get(priv->tx)]);
 	rtw_free(sdrv[uart_index_get(priv->tx)]);
 	sdrv[uart_index_get(priv->tx)] = NULL;
+	/* Mark device as uninitialized. */
+  	priv->initialized = false;
 }
 
 /****************************************************************************
@@ -1203,13 +1215,17 @@ static void amebasmart_serial_pmnotify(FAR struct pm_callback_s *cb, int domain,
 	switch (pmstate)
 	{
 		case PM_NORMAL:
+			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
+			amebasmart_serial_pm_setsuspend(false);
+			break;
 		case PM_IDLE:
 		case PM_STANDBY:
 			break;
 		case PM_SLEEP:
+			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
+			amebasmart_serial_pm_setsuspend(true);
 			break;
 		default:
-			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
 			break;
 	}
 
@@ -1285,11 +1301,11 @@ static int amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
 			}
 #endif
 #ifdef CONFIG_RTL8730E_UART4
-			LOGUART_TypeDef *UARTLOG = LOGUART_DEV;
-			if (!(UARTLOG->LOGUART_UART_LSR & LOG_UART_IDX_FLAG[2].empty)) {		/* log UART Tx Empty Check */
-				printf("\n[%s] - %d, UARTLOG->LOGUART_UART_LSR = %d, LOG_UART_IDX_FLAG[2].empty = %d\n",__FUNCTION__,__LINE__, UARTLOG->LOGUART_UART_LSR, LOG_UART_IDX_FLAG[2].empty);
-				return ERROR;
-			}
+			// LOGUART_TypeDef *UARTLOG = LOGUART_DEV;
+			// if (!(UARTLOG->LOGUART_UART_LSR & LOG_UART_IDX_FLAG[2].empty)) {		/* log UART Tx Empty Check */
+			// 	printf("\n[%s] - %d, UARTLOG->LOGUART_UART_LSR = %d, LOG_UART_IDX_FLAG[2].empty = %d\n",__FUNCTION__,__LINE__, UARTLOG->LOGUART_UART_LSR, LOG_UART_IDX_FLAG[2].empty);
+			// 	return ERROR;
+			// }
 #endif
 			break;
 		default:
@@ -1297,6 +1313,100 @@ static int amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
 	}
 
 	return OK;
+}
+#endif
+
+
+#ifdef CONFIG_PM
+static void amebasmart_serial_setsuspend(struct uart_dev_s *dev, bool suspend, bool is_loguart)
+{
+	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
+
+	if (priv->suspended == suspend)
+	{
+		return;
+	}
+
+	priv->suspended = suspend;
+
+	if (suspend)
+	{
+		if (is_loguart) {
+			/* LOGUART is controlled by LP, cannot shut down */
+			printf("\n[%s] - %d\n",__FUNCTION__,__LINE__);
+			rtl8730e_log_up_shutdown(dev);
+			rtl8730e_log_up_detach(dev);
+		}
+		else {
+			/* Disable interrupts to prevent Tx. */
+			printf("\n[%s] - %d\n",__FUNCTION__,__LINE__);
+			rtl8730e_up_shutdown(dev);
+			rtl8730e_up_detach(dev);
+		}
+
+		/* Wait last Tx to complete. */
+		/* The buffer condition for uart port has already been checked in prepare callback*/
+	}
+	else
+	{
+		/* Re-enable interrupts to resume Tx. */
+		if (is_loguart) {
+			// rtl8730e_up_setup(dev);
+			rtl8730e_log_up_attach(dev);
+			rtl8730e_log_up_txint(dev, priv->txint_enable);
+			rtl8730e_log_up_rxint(dev, priv->rxint_enable);
+		}
+		else {
+			rtl8730e_up_setup(dev);
+			rtl8730e_up_attach(dev);
+			rtl8730e_up_txint(dev, priv->txint_enable);
+			rtl8730e_up_rxint(dev, priv->rxint_enable);
+		}
+	}
+}
+#endif
+
+/****************************************************************************
+ * Name: amebasmart_serial_pm_setsuspend
+ *
+ * Description:
+ *   Suspend or resume serial peripherals for/from deep-sleep/stop modes.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_PM
+static void amebasmart_serial_pm_setsuspend(bool suspend)
+{
+	/* Already in desired state? */
+
+	if (suspend == g_serialpm.serial_suspended)
+		return;
+
+	g_serialpm.serial_suspended = suspend;
+
+#ifdef TTYS1_DEV
+	// struct rtl8730e_up_dev_s *priv0 = (struct rtl8730e_up_dev_s *)g_uart0port.priv;
+	// if (priv0 || priv0->initialized)
+	// {
+	// 	amebasmart_serial_setsuspend(&g_uart0port, suspend, false);
+	// }
+#endif
+
+#ifdef TTYS2_DEV
+	// struct rtl8730e_up_dev_s *priv1 = (struct rtl8730e_up_dev_s *)g_uart1port.priv;
+	// if (priv1 || priv1->initialized)
+	// {
+	// 	amebasmart_serial_setsuspend(&g_uart1port, suspend, false);
+	// }
+#endif
+
+#ifdef CONSOLE_DEV
+	struct rtl8730e_up_dev_s *priv4 = (struct rtl8730e_up_dev_s *)g_uart4port.priv;
+	if (priv4 || priv4->initialized)
+	{
+		amebasmart_serial_setsuspend(&g_uart4port, suspend, true);
+	}
+#endif
 }
 #endif
 
@@ -1401,7 +1511,7 @@ int up_lowgetc(void)
 		return;
 	rxd = rtl8730e_up_receive(&CONSOLE_DEV, &rxd);
 #endif
-	printf("%c", rxd & 0xff);
+	// printf("%c", rxd & 0xff);
 	return rxd & 0xff;
 }
 
