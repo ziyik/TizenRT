@@ -147,6 +147,19 @@ static struct
 		.pm_cb.notify  = amebasmart_ble_pmnotify,
 		.pm_cb.prepare = amebasmart_ble_pmprepare,
 	};
+
+static void rtk_bt_presleep_process(void)
+{
+	system_enable_power_save();
+	rtk_bt_enable_power_save();
+}
+
+static struct task_struct rtk_bt_presleep_handler;
+static void rtk_bt_presleep_task(void) {
+	if (rtw_create_task(&rtk_bt_presleep_handler, (const char *const)"rtk_bt_presleep_task", 512, 3, (void*)rtk_bt_presleep_process, NULL) != 1) {
+		DiagPrintf("Create rtk_bt_presleep_task Err!!\n");
+	}
+}
 #endif
 
 /****************************************************************************
@@ -182,8 +195,8 @@ static void amebasmart_ble_pmnotify(struct pm_callback_s *cb, int domain,
 
 	case PM_SLEEP:		/* Logic for PM_SLEEP goes here */
 		printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
-		system_enable_power_save();
-		rtk_bt_enable_power_save();
+		rtk_bt_presleep_task();
+		rtw_delete_task(&rtk_bt_presleep_handler);
 		break;
 
 	default:
