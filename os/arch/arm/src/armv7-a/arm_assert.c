@@ -396,7 +396,7 @@ static void arm_dump_stack(const char *tag, uint32_t sp,
  * Name: arm_dumpstate
  ****************************************************************************/
 
-void arm_dumpstate(void)
+static void arm_dumpstate(void)
 {
   struct tcb_s *rtcb = this_task();
   uint32_t sp = up_getsp();

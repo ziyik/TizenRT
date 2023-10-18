@@ -112,7 +112,7 @@ static void set_timer_interrupt(u32 TimerIdx, u32 Timercnt) {
 	SOCPS_SetAPWakeEvent_MSK0((WAKE_SRC_Timer1 << TimerIdx), ENABLE);
 }
 
-bool set_interrupt_count = 0;
+int set_interrupt_count = 3;
 static enum pm_state_e oldstate = PM_NORMAL;
 #ifdef CONFIG_PM
 static void up_idlepm(void)
@@ -138,7 +138,7 @@ static void up_idlepm(void)
 		if (ret < 0) {
 			/* The new state change failed, revert to the preceding state */
 			printf("\n[%s] - %d\n",__FUNCTION__,__LINE__);
-			(void)pm_changestate(PM_IDLE_DOMAIN, oldstate);
+			// (void)pm_changestate(PM_IDLE_DOMAIN, oldstate);
 			newstate = oldstate;
 			goto EXIT2;
 		} else {
@@ -163,12 +163,12 @@ static void up_idlepm(void)
 				break;
 			case PM_SLEEP:
 				printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, newstate);
-				if(!set_interrupt_count) {
+				if(set_interrupt_count >= 0) {
 					/* need further check, for SMP case*/
 					system_can_yield = 0;
 					// set interrupt source
-					set_timer_interrupt(1, 5);
-					set_interrupt_count = 1;
+					set_timer_interrupt(1, 5 + set_interrupt_count);
+					set_interrupt_count--;
 					if (up_cpu_index() == 0) {
 						/* mask sys tick interrupt*/
 						arm_arch_timer_int_mask(1);
