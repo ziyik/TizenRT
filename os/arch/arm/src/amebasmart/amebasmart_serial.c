@@ -1341,7 +1341,7 @@ static void amebasmart_serial_setsuspend(struct uart_dev_s *dev, bool suspend, b
 			if (sdrv[uart_index_get(priv->tx)]) {
 				rtl8730e_up_shutdown(dev);
 			}
-			rtl8730e_up_detach(dev);
+			// rtl8730e_up_detach(dev);
 		}
 
 		/* Wait last Tx to complete. */
@@ -1356,10 +1356,10 @@ static void amebasmart_serial_setsuspend(struct uart_dev_s *dev, bool suspend, b
 			rtl8730e_log_up_rxint(dev, priv->rxint_enable);
 		}
 		else {
-			rtl8730e_up_attach(dev);
-			// rtl8730e_up_setup_pin(dev);
-			rtl8730e_up_txint(dev, priv->txint_enable);
-			rtl8730e_up_rxint(dev, priv->rxint_enable);
+			// rtl8730e_up_attach(dev);
+			rtl8730e_up_setup_pin(dev);
+			// rtl8730e_up_txint(dev, priv->txint_enable);
+			// rtl8730e_up_rxint(dev, priv->rxint_enable);
 		}
 	}
 }
@@ -1449,8 +1449,11 @@ void up_serialinit(void)
 	uart_register("/dev/ttyS1", &TTYS1_DEV);
 #endif
 #ifdef TTYS2_DEV
-	rtl8730e_up_setup(&TTYS2_DEV);
-	// rtl8730e_up_setup_pin(&TTYS2_DEV);
+	rtl8730e_up_setup_pin(&TTYS2_DEV);
+	// rtl8730e_up_setup(&TTYS2_DEV);
+	// rtl8730e_up_attach(&TTYS2_DEV);
+	// rtl8730e_up_txint(&TTYS2_DEV, g_uart1priv.txint_enable);
+	// rtl8730e_up_rxint(&TTYS2_DEV, g_uart1priv.rxint_enable);
 	uart_register("/dev/ttyS2", &TTYS2_DEV);
 #endif
 
