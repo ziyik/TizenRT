@@ -1333,15 +1333,15 @@ static void amebasmart_serial_setsuspend(struct uart_dev_s *dev, bool suspend, b
 	{
 		if (is_loguart) {
 			/* LOGUART is controlled by LP, cannot shut down */
-			printf("\n[%s] - %d\n",__FUNCTION__,__LINE__);
 			rtl8730e_log_up_shutdown(dev);
 			rtl8730e_log_up_detach(dev);
 		}
 		else {
 			/* Disable interrupts to prevent Tx. */
-			printf("\n[%s] - %d\n",__FUNCTION__,__LINE__);
-			rtl8730e_up_shutdown(dev);
-			rtl8730e_up_detach(dev);
+			if (sdrv[uart_index_get(priv->tx)]) {
+				rtl8730e_up_shutdown(dev);
+			}
+			// rtl8730e_up_detach(dev);
 		}
 
 		/* Wait last Tx to complete. */
@@ -1351,16 +1351,15 @@ static void amebasmart_serial_setsuspend(struct uart_dev_s *dev, bool suspend, b
 	{
 		/* Re-enable interrupts to resume Tx. */
 		if (is_loguart) {
-			// rtl8730e_up_setup(dev);
 			rtl8730e_log_up_attach(dev);
 			rtl8730e_log_up_txint(dev, priv->txint_enable);
 			rtl8730e_log_up_rxint(dev, priv->rxint_enable);
 		}
 		else {
-			rtl8730e_up_setup(dev);
-			rtl8730e_up_attach(dev);
-			rtl8730e_up_txint(dev, priv->txint_enable);
-			rtl8730e_up_rxint(dev, priv->rxint_enable);
+			// rtl8730e_up_attach(dev);
+			rtl8730e_up_setup_pin(dev);
+			// rtl8730e_up_txint(dev, priv->txint_enable);
+			// rtl8730e_up_rxint(dev, priv->rxint_enable);
 		}
 	}
 }
@@ -1385,19 +1384,19 @@ static void amebasmart_serial_pm_setsuspend(bool suspend)
 	g_serialpm.serial_suspended = suspend;
 
 #ifdef TTYS1_DEV
-	// struct rtl8730e_up_dev_s *priv0 = (struct rtl8730e_up_dev_s *)g_uart0port.priv;
-	// if (priv0 || priv0->initialized)
-	// {
-	// 	amebasmart_serial_setsuspend(&g_uart0port, suspend, false);
-	// }
+	struct rtl8730e_up_dev_s *priv0 = (struct rtl8730e_up_dev_s *)g_uart0port.priv;
+	if (priv0 || priv0->initialized)
+	{
+		amebasmart_serial_setsuspend(&g_uart0port, suspend, false);
+	}
 #endif
 
 #ifdef TTYS2_DEV
-	// struct rtl8730e_up_dev_s *priv1 = (struct rtl8730e_up_dev_s *)g_uart1port.priv;
-	// if (priv1 || priv1->initialized)
-	// {
-	// 	amebasmart_serial_setsuspend(&g_uart1port, suspend, false);
-	// }
+	struct rtl8730e_up_dev_s *priv1 = (struct rtl8730e_up_dev_s *)g_uart1port.priv;
+	if (priv1 || priv1->initialized)
+	{
+		amebasmart_serial_setsuspend(&g_uart1port, suspend, false);
+	}
 #endif
 
 #ifdef CONSOLE_DEV
@@ -1451,6 +1450,10 @@ void up_serialinit(void)
 #endif
 #ifdef TTYS2_DEV
 	rtl8730e_up_setup_pin(&TTYS2_DEV);
+	// rtl8730e_up_setup(&TTYS2_DEV);
+	// rtl8730e_up_attach(&TTYS2_DEV);
+	// rtl8730e_up_txint(&TTYS2_DEV, g_uart1priv.txint_enable);
+	// rtl8730e_up_rxint(&TTYS2_DEV, g_uart1priv.rxint_enable);
 	uart_register("/dev/ttyS2", &TTYS2_DEV);
 #endif
 
@@ -1511,7 +1514,6 @@ int up_lowgetc(void)
 		return;
 	rxd = rtl8730e_up_receive(&CONSOLE_DEV, &rxd);
 #endif
-	// printf("%c", rxd & 0xff);
 	return rxd & 0xff;
 }
 
