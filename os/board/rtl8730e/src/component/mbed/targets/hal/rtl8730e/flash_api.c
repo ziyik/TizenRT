@@ -197,12 +197,6 @@ int  flash_read_word(flash_t *obj, u32 address, u32 *data)
 	u32 temp;
 	u32 i = 4 - offset_to_align;
 
-#ifdef ARM_CORE_CA32
-	if (SYSCFG_CUT_VERSION_A == SYSCFG_RLVersion()) {
-		arm_gic_freq_switch();
-	}
-#endif
-
 	if (offset_to_align) {
 		address -= offset_to_align;
 		temp = HAL_READ32(SPI_FLASH_BASE, address);
@@ -217,11 +211,6 @@ int  flash_read_word(flash_t *obj, u32 address, u32 *data)
 		* data = HAL_READ32(SPI_FLASH_BASE, address);
 	}
 
-#ifdef ARM_CORE_CA32
-	if (SYSCFG_CUT_VERSION_A == SYSCFG_RLVersion()) {
-		arm_gic_freq_restore();
-	}
-#endif
 	return 1;
 }
 
@@ -287,12 +276,6 @@ int  flash_stream_read(flash_t *obj, u32 address, u32 len, u8 *data)
 	u8 *ptr;
 	u8 *pbuf;
 
-#ifdef ARM_CORE_CA32
-	if (SYSCFG_CUT_VERSION_A == SYSCFG_RLVersion()) {
-		arm_gic_freq_switch();
-	}
-#endif
-
 	offset_to_align = address & 0x03;
 	pbuf = data;
 	if (offset_to_align != 0) {
@@ -341,11 +324,6 @@ int  flash_stream_read(flash_t *obj, u32 address, u32 len, u8 *data)
 		}
 	}
 
-#ifdef ARM_CORE_CA32
-	if (SYSCFG_CUT_VERSION_A == SYSCFG_RLVersion()) {
-		arm_gic_freq_restore();
-	}
-#endif
 	return 1;
 }
 

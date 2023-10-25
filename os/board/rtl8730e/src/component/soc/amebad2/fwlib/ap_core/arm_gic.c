@@ -208,6 +208,32 @@ uint32_t arm_gic_get_active(void)
 	return irq;
 }
 
+int arm_gic_irq_is_pending(uint32_t irq)
+{
+	int int_grp, int_off;
+	uint32_t enabler;
+
+	int_grp = irq / 32;
+	int_off = irq % 32;
+
+	arm_gic_freq_switch();
+	enabler = sys_read32(GICD_ISPENDRn + int_grp * 4);
+	arm_gic_freq_restore();
+
+	return (enabler & (1 << int_off)) != 0;
+}
+
+void arm_gic_set_pending_irq(uint32_t irq)
+{
+	int int_grp, int_off;
+
+	int_grp = irq / 32;
+	int_off = irq % 32;
+	arm_gic_freq_switch();
+	sys_write32((1 << int_off), (GICD_ISPENDRn + int_grp * 4));
+	arm_gic_freq_restore();
+}
+
 void arm_gic_clear_pending_irq(uint32_t irq)
 {
 	int int_grp, int_off;
@@ -227,7 +253,7 @@ void arm_gic_eoi(uint32_t irq)
 	arm_gic_freq_restore();
 }
 
-#if defined(CONFIG_CPUS_NUM) && (CONFIG_CPUS_NUM > 1)
+#if (CONFIG_CPUS_NUM > 1)
 void arm_gic_raise_softirq(uint32_t cpu, uint32_t irq)
 {
 	if (irq > 15 || cpu > 7) {
@@ -247,10 +273,6 @@ static void gic_dist_init(void)
 	gic_irqs = sys_read32(GICD_TYPER) & 0x1f;
 	gic_irqs = (gic_irqs + 1) * 32;
 	gic_irqs = gic_irqs < GIC_MAX_NUM_INTR ? gic_irqs : GIC_MAX_NUM_INTR;
-	/*
-	 * SVACE-UNREACHABLE_CODE : It was depends on the #define GIC_MAX_NUM_INTR value set by the user
-	 * Realtek: To cover all architecture RTK solution
-	 */
 	if (gic_irqs > 1020) {
 		gic_irqs = 1020;
 	}

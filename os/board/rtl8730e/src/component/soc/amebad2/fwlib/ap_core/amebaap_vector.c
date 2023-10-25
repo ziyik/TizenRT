@@ -58,10 +58,5 @@ BOOL irq_unregister(IRQn_Type   IrqNum)
 	return _TRUE;
 }
 
-void irq_clear_pending(IRQn_Type irqn)
-{
-	arm_gic_clear_pending_irq(32 + irqn);
-}
-
 
 /******************* (C) COPYRIGHT 2016 Realtek Semiconductor *****END OF FILE****/

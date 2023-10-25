@@ -21,9 +21,10 @@
 #include "ameba_ota.h"
 
 #ifdef CONFIG_PLATFORM_TIZENRT_OS
-#include "ameba_freertos_pmu.h"
+#define configNUM_CORES CONFIG_NUM_CORES
+#include "ameba_tizenrt_pmu.h"
 #elif defined(PLATFORM_FREERTOS)
-#include "ameba_freertos_pmu.h"
+#include "ameba_tizenrt_pmu.h"
 #include "freertos_pmu.h"
 #include "FreeRTOS.h"
 #include "task.h"

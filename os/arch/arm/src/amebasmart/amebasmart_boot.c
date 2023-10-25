@@ -43,6 +43,7 @@
 #include "amebasmart_memorymap.h"
 #include "amebasmart_boot.h"
 #include "sctlr.h"
+#include "psci.h"
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -359,16 +360,6 @@ void arm_boot(void)
 
   arm_fpuconfig();
 
-  /* Perform board-specific memory initialization,  This must include
-   * initialization of board-specific memory resources (e.g., SDRAM)
-   *
-   * NOTE: We must use caution prior to this point to make sure that
-   * the logic does not access any global variables that might lie
-   * in SDRAM.
-   */
-
-  amebasmart_memory_initialize();
-
 #ifdef NEED_SDRAM_REMAPPING
   /* SDRAM was configured in a temporary state to support low-level
    * initialization.  Now that the SDRAM has been fully initialized,
@@ -412,9 +403,13 @@ void arm_boot(void)
    */
 
   //SMP pending for Tizen Confirmation//
+#ifdef CONFIG_SMP
   cp15_wrvbar((uint32_t)_vector_start);
   amebasmart_cpu_enable();
-
+#else
+  //psci need to be initiated if smp is not enabled
+  // psci_init();
+#endif
   // TBD: Complete the rest of the step in app_start, prvSetupHardware will be done in os_start()
   app_start();
 }

@@ -195,6 +195,14 @@
 #define CHAR_TIMEOUT 6540
 #define TX_FIFO_MAX 16
 
+/* Power management definitions */
+#if defined(CONFIG_PM) && !defined(CONFIG_RTL8730E_PM_SERIAL_ACTIVITY)
+#define CONFIG_RTL8730E_PM_SERIAL_ACTIVITY  10
+#endif
+#if defined(CONFIG_PM)
+#define PM_IDLE_DOMAIN             0 /* Revisit */
+#endif
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -229,6 +237,11 @@ struct rtl8730e_up_dev_s {
 	uint8_t oflow:1;			/* output flow control (CTS) enabled */
 #endif
 	uint8_t tx_level;
+  	/* Has been initialized and HW is setup. */
+  	bool              initialized;
+#ifdef CONFIG_PM
+  	bool              suspended; /* UART device has been suspended. */
+#endif
 };
 
 /****************************************************************************
@@ -253,6 +266,8 @@ static int rtl8730e_up_setup(struct uart_dev_s *dev);
 static void rtl8730e_up_shutdown(struct uart_dev_s *dev);
 static int rtl8730e_up_attach(struct uart_dev_s *dev);
 static void rtl8730e_up_detach(struct uart_dev_s *dev);
+//TODO: -PENDING- up_interrupt is not implemented yet. When it is implemented,
+// it should notify PM of its current activity by using up_activity() function
 static int rtl8730e_up_interrupt(int irq, void *context, FAR void *arg);
 static int rtl8730e_up_ioctl(FAR struct uart_dev_s *dev, int cmd, unsigned long arg);
 static int rtl8730e_up_receive(struct uart_dev_s *dev, unsigned int*status);
@@ -262,6 +277,15 @@ static void rtl8730e_up_send(struct uart_dev_s *dev, int ch);
 static void rtl8730e_up_txint(struct uart_dev_s *dev, bool enable);
 static bool rtl8730e_up_txready(struct uart_dev_s *dev);
 static bool rtl8730e_up_txempty(struct uart_dev_s *dev);
+
+#ifdef CONFIG_PM
+static void amebasmart_serial_setsuspend(struct uart_dev_s *dev, bool suspend, bool is_loguart);
+static void amebasmart_serial_pm_setsuspend(bool suspend);
+static void amebasmart_serial_pmnotify(FAR struct pm_callback_s *cb, int domain,
+										enum pm_state_e pmstate);
+static int  amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
+										enum pm_state_e pmstate);
+#endif
 
 /****************************************************************************
  * Private Data
@@ -500,6 +524,21 @@ static uart_dev_t g_uart4port = {
 	.priv = &g_uart4priv,
 };
 #endif
+
+#ifdef CONFIG_PM
+static struct
+{
+	struct pm_callback_s pm_cb;
+	bool serial_suspended;
+} g_serialpm =
+	{
+		.pm_cb.name = "rtl8730e_serial",
+		.pm_cb.notify  = amebasmart_serial_pmnotify,
+		.pm_cb.prepare = amebasmart_serial_pmprepare,
+		.serial_suspended = false
+	};
+#endif
+
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
@@ -556,6 +595,11 @@ static void rtl8730e_log_up_shutdown(struct uart_dev_s *dev)
 
 static int rtl8730e_log_uart_irq(void *Data)
 {
+	/* Report serial activity to the power management logic */
+#if defined(CONFIG_PM) && CONFIG_RTL8730E_PM_SERIAL_ACTIVITY > 0
+	pm_activity(PM_IDLE_DOMAIN, CONFIG_RTL8730E_PM_SERIAL_ACTIVITY);
+#endif
+
 	uart_recvchars(&CONSOLE_DEV);
 	return 0;
 }
@@ -811,6 +855,8 @@ static int rtl8730e_up_setup(struct uart_dev_s *dev)
 	DEBUGASSERT(!sdrv[uart_index_get(priv->tx)]);
 	sdrv[uart_index_get(priv->tx)] = (serial_t *)kmm_malloc(sizeof(serial_t));
 	DEBUGASSERT(sdrv[uart_index_get(priv->tx)]);
+	/* Mark device as initialized. */
+  	priv->initialized = true;
 #if (CONFIG_UART4_BAUD != 1500000)
 #error "Error Amebasmart UART4 works with fixed baud rate: 1,500,000. Please set it to 1500000 in the menuconfig"
 #endif
@@ -849,6 +895,7 @@ static int rtl8730e_up_setup_pin(struct uart_dev_s *dev)
 	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
 	DEBUGASSERT(priv);
 
+	priv->initialized = true;
 	serial_pin_init(priv->tx, priv->rx);
 	return OK;
 }
@@ -870,6 +917,8 @@ static void rtl8730e_up_shutdown(struct uart_dev_s *dev)
 	serial_free(sdrv[uart_index_get(priv->tx)]);
 	rtw_free(sdrv[uart_index_get(priv->tx)]);
 	sdrv[uart_index_get(priv->tx)] = NULL;
+	/* Mark device as uninitialized. */
+  	priv->initialized = false;
 }
 
 /****************************************************************************
@@ -891,6 +940,12 @@ void rtl8730e_uart_irq(uint32_t id, SerialIrq event)
 {
 	struct uart_dev_s *dev = (struct uart_dev_s *)id;
 	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
+
+	/* Report serial activity to the power management logic */
+#if defined(CONFIG_PM) && CONFIG_RTL8730E_PM_SERIAL_ACTIVITY > 0
+	pm_activity(PM_IDLE_DOMAIN, CONFIG_RTL8730E_PM_SERIAL_ACTIVITY);
+#endif
+
 	if (event == RxIrq) {
 		uart_recvchars(dev);
 	}
@@ -1132,6 +1187,229 @@ static bool rtl8730e_up_txempty(struct uart_dev_s *dev)
 }
 
 /****************************************************************************
+ * Name: amebasmart_serial_pmnotify (DUMMY)
+ *
+ * Description:
+ *   Notify the driver of new power state. This callback is  called after
+ *   all drivers have had the opportunity to prepare for the new power state.
+ *
+ * Input Parameters:
+ *
+ *    cb - Returned to the driver. The driver version of the callback
+ *         structure may include additional, driver-specific state data at
+ *         the end of the structure.
+ *
+ *    pmstate - Identifies the new PM state
+ *
+ * Returned Value:
+ *   None - The driver already agreed to transition to the low power
+ *   consumption state when when it returned OK to the prepare() call.
+ *
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_PM
+static void amebasmart_serial_pmnotify(FAR struct pm_callback_s *cb, int domain,
+                                   enum pm_state_e pmstate)
+{
+	switch (pmstate)
+	{
+		case PM_NORMAL:
+			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
+			amebasmart_serial_pm_setsuspend(false);
+			break;
+		case PM_IDLE:
+		case PM_STANDBY:
+			break;
+		case PM_SLEEP:
+			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
+			amebasmart_serial_pm_setsuspend(true);
+			break;
+		default:
+			break;
+	}
+
+	return;
+}
+#endif
+
+/****************************************************************************
+ * Name: amebasmart_serial_pmprepare (DUMMY)
+ *
+ * Description:
+ *   Request the driver to prepare for a new power state. This is a warning
+ *   that the system is about to enter into a new power state. The driver
+ *   should begin whatever operations that may be required to enter power
+ *   state. The driver may abort the state change mode by returning a
+ *   non-zero value from the callback function.
+ *
+ * Input Parameters:
+ *
+ *    cb - Returned to the driver. The driver version of the callback
+ *         structure may include additional, driver-specific state data at
+ *         the end of the structure.
+ *
+ *    pmstate - Identifies the new PM state
+ *
+ * Returned Value:
+ *   Zero - (OK) means the event was successfully processed and that the
+ *          driver is prepared for the PM state change.
+ *
+ *   Non-zero - means that the driver is not prepared to perform the tasks
+ *              needed achieve this power setting and will cause the state
+ *              change to be aborted. NOTE: The prepare() method will also
+ *              be called when reverting from lower back to higher power
+ *              consumption modes (say because another driver refused a
+ *              lower power state change). Drivers are not permitted to
+ *              return non-zero values when reverting back to higher power
+ *              consumption modes!
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_PM
+static int amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
+                                   enum pm_state_e pmstate)
+{
+	switch (pmstate)
+	{
+		case PM_NORMAL:
+		case PM_IDLE:
+		case PM_STANDBY:
+			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
+			break;
+
+		case PM_SLEEP:
+			/* UART0_DEV: hp uart0
+			 * UART1_DEV: hp uart1
+			 * UART2_DEV: hp uart2
+			 * UART3_DEV: hp uart3_bt
+			 * LOGUART_DEV: KM0 log uart */
+			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
+#ifdef CONFIG_RTL8730E_UART0
+			if ((g_uart0priv.txint_enable) && (!serial_writable(sdrv[0]))) {		/* If Tx init enable and FIFO not empty */
+					return ERROR;
+			}
+#endif
+#ifdef CONFIG_RTL8730E_UART1
+			if ((g_uart1priv.txint_enable) && (!serial_writable(sdrv[1]))) {		/* If Tx init enable and FIFO not empty */
+					return ERROR;
+			}
+#endif
+#ifdef CONFIG_RTL8730E_UART2
+			if ((g_uart2priv.txint_enable) && (!serial_writable(sdrv[2]))) {		/* If Tx init enable and FIFO not empty */
+					return ERROR;
+			}
+#endif
+#ifdef CONFIG_RTL8730E_UART4
+			// LOGUART_TypeDef *UARTLOG = LOGUART_DEV;
+			// if (!(UARTLOG->LOGUART_UART_LSR & LOG_UART_IDX_FLAG[2].empty)) {		/* log UART Tx Empty Check */
+			// 	printf("\n[%s] - %d, UARTLOG->LOGUART_UART_LSR = %d, LOG_UART_IDX_FLAG[2].empty = %d\n",__FUNCTION__,__LINE__, UARTLOG->LOGUART_UART_LSR, LOG_UART_IDX_FLAG[2].empty);
+			// 	return ERROR;
+			// }
+#endif
+			break;
+		default:
+			break;
+	}
+
+	return OK;
+}
+#endif
+
+
+#ifdef CONFIG_PM
+static void amebasmart_serial_setsuspend(struct uart_dev_s *dev, bool suspend, bool is_loguart)
+{
+	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
+
+	if (priv->suspended == suspend)
+	{
+		return;
+	}
+
+	priv->suspended = suspend;
+
+	if (suspend)
+	{
+		if (is_loguart) {
+			/* LOGUART is controlled by LP, cannot shut down */
+			rtl8730e_log_up_shutdown(dev);
+			rtl8730e_log_up_detach(dev);
+		}
+		else {
+			/* Disable interrupts to prevent Tx. */
+			if (sdrv[uart_index_get(priv->tx)]) {
+				rtl8730e_up_shutdown(dev);
+			}
+			// rtl8730e_up_detach(dev);
+		}
+
+		/* Wait last Tx to complete. */
+		/* The buffer condition for uart port has already been checked in prepare callback*/
+	}
+	else
+	{
+		/* Re-enable interrupts to resume Tx. */
+		if (is_loguart) {
+			rtl8730e_log_up_attach(dev);
+			rtl8730e_log_up_txint(dev, priv->txint_enable);
+			rtl8730e_log_up_rxint(dev, priv->rxint_enable);
+		}
+		else {
+			// rtl8730e_up_attach(dev);
+			rtl8730e_up_setup_pin(dev);
+			// rtl8730e_up_txint(dev, priv->txint_enable);
+			// rtl8730e_up_rxint(dev, priv->rxint_enable);
+		}
+	}
+}
+#endif
+
+/****************************************************************************
+ * Name: amebasmart_serial_pm_setsuspend
+ *
+ * Description:
+ *   Suspend or resume serial peripherals for/from deep-sleep/stop modes.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_PM
+static void amebasmart_serial_pm_setsuspend(bool suspend)
+{
+	/* Already in desired state? */
+
+	if (suspend == g_serialpm.serial_suspended)
+		return;
+
+	g_serialpm.serial_suspended = suspend;
+
+#ifdef TTYS1_DEV
+	struct rtl8730e_up_dev_s *priv0 = (struct rtl8730e_up_dev_s *)g_uart0port.priv;
+	if (priv0 || priv0->initialized)
+	{
+		amebasmart_serial_setsuspend(&g_uart0port, suspend, false);
+	}
+#endif
+
+#ifdef TTYS2_DEV
+	struct rtl8730e_up_dev_s *priv1 = (struct rtl8730e_up_dev_s *)g_uart1port.priv;
+	if (priv1 || priv1->initialized)
+	{
+		amebasmart_serial_setsuspend(&g_uart1port, suspend, false);
+	}
+#endif
+
+#ifdef CONSOLE_DEV
+	struct rtl8730e_up_dev_s *priv4 = (struct rtl8730e_up_dev_s *)g_uart4port.priv;
+	if (priv4 || priv4->initialized)
+	{
+		amebasmart_serial_setsuspend(&g_uart4port, suspend, true);
+	}
+#endif
+}
+#endif
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -1147,6 +1425,9 @@ static bool rtl8730e_up_txempty(struct uart_dev_s *dev)
 
 void up_serialinit(void)
 {
+#ifdef CONFIG_PM
+	int ret;
+#endif
 #ifdef CONSOLE_DEV
 	CONSOLE_DEV.isconsole = true;
 	rtl8730e_up_setup(&CONSOLE_DEV);
@@ -1169,9 +1450,19 @@ void up_serialinit(void)
 #endif
 #ifdef TTYS2_DEV
 	rtl8730e_up_setup_pin(&TTYS2_DEV);
+	// rtl8730e_up_setup(&TTYS2_DEV);
+	// rtl8730e_up_attach(&TTYS2_DEV);
+	// rtl8730e_up_txint(&TTYS2_DEV, g_uart1priv.txint_enable);
+	// rtl8730e_up_rxint(&TTYS2_DEV, g_uart1priv.rxint_enable);
 	uart_register("/dev/ttyS2", &TTYS2_DEV);
 #endif
 
+#ifdef CONFIG_PM
+	/* Register to receive power management callbacks */
+	ret = pm_register(&g_serialpm.pm_cb);
+	DEBUGASSERT(ret == OK);
+	UNUSED(ret);
+#endif
 }
 
 /****************************************************************************

@@ -25,6 +25,23 @@ static inline void arm_arch_timer_set_compare(uint64_t val) /*write CNTV_CVAL: v
 					 : : "r"(val) : "memory");
 }
 
+static inline void arm_arch_timer_int_mask(unsigned char enable) /*write CNTV_CTL: virtual timer Control register*/
+{
+	uint32_t cntv_ctl = 0;
+
+	__asm__ volatile("mrc p15, 0, %0, c14, c3, 1\n\t"
+					 : "=r"(cntv_ctl) :  : "memory");
+
+	if (enable) {
+		cntv_ctl |= CNTV_CTL_IMASK;
+	} else {
+		cntv_ctl &= ~CNTV_CTL_IMASK;
+	}
+
+	__asm__ volatile("mcr p15, 0, %0, c14, c3, 1\n\t"
+					 : : "r"(cntv_ctl) : "memory");
+}
+
 static inline uint64_t arm_arch_timer_compare(void)
 {
 	uint64_t cntvcval;

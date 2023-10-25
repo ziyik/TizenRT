@@ -618,7 +618,7 @@ void os_start(void)
 
 	/* The IDLE Loop **********************************************************/
 	/* When control is return to this point, the system is idle. */
-
+	pm_relax(PM_IDLE_DOMAIN, PM_NORMAL);
 	svdbg("Beginning Idle Loop\n");
 	for (;;) {
 		/* Perform garbage collection (if it is not being done by the worker

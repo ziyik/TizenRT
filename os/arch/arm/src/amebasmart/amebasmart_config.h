@@ -88,4 +88,11 @@
 #  undef  AMEBASMART_HAVE_UART_CONSOLE
 #endif
 
+extern void tizenrt_pre_sleep_processing(uint32_t *expected_idle_time);
+extern void tizenrt_post_sleep_processing(uint32_t *expected_idle_time);
+
+#define configPRE_SLEEP_PROCESSING( x )					( tizenrt_pre_sleep_processing((uint32_t *)&x) )
+#define configPOST_SLEEP_PROCESSING( x )				( tizenrt_post_sleep_processing((uint32_t *)&x) )
+
+
 #endif /* __ARCH_ARM_SRC_AMEBASMART_AMEBASMART_CONFIG_H */

@@ -103,10 +103,11 @@ void amebasmart_cpu_disable(void)
  *   None
  *
  ****************************************************************************/
-
+// Refer to vPortSecondaryStart
 void amebasmart_cpu_enable(void)
 {
-  vPortSecondaryStart();
+  psci_init();
+  // smp_init();
 }
 
 /****************************************************************************

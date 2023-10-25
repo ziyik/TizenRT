@@ -28,6 +28,9 @@
 #include <tinyara/net/if/ble.h>
 #include <ble_tizenrt_service.h>
 #include <debug.h>
+#if defined(RTK_BT_POWER_CONTROL_SUPPORT) && RTK_BT_POWER_CONTROL_SUPPORT
+#include "rtk_bt_power_control.h"
+#endif
 
 #define RTK_BT_DEV_NAME "BLE_TIZENRT"
 
@@ -111,8 +114,8 @@ static uint8_t scan_rsp_data[] = {
 //         .addr_val = {0},
 //     },
 //     .channel_map = RTK_BT_LE_ADV_CHNL_ALL,
-//	.filter_policy = RTK_BT_LE_ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
-//};
+//     .filter_policy = RTK_BT_LE_ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
+// };
 #endif
 
  static rtk_bt_le_scan_param_t scan_param = {
@@ -124,7 +127,7 @@ static uint8_t scan_rsp_data[] = {
      .duplicate_opt = 0,
  };
 
-//static rtk_bt_le_security_param_t sec_param = {
+// static rtk_bt_le_security_param_t sec_param = {
 //    .io_cap = RTK_IO_CAP_NO_IN_NO_OUT,
 //    .oob_data_flag = 0,
 //    .bond_flag = 1,
@@ -132,7 +135,7 @@ static uint8_t scan_rsp_data[] = {
 //    .sec_pair_flag = 0,
 //    .use_fixed_key = 0,
 //    .fixed_key = 000000,
-//};
+// };
 
 #if RTK_BLE_PRIVACY_SUPPORT
 static bool privacy_enable = false;
@@ -204,7 +207,7 @@ static rtk_bt_evt_cb_ret_t ble_tizenrt_scatternet_gap_app_callback(uint8_t evt_c
 		break;
 	}
 #endif
-	
+
 #if RTK_BLE_5_0_PA_ADV_SUPPORT
 	case RTK_BT_LE_GAP_EVT_PA_IND: {
 		rtk_bt_le_pa_ind_t *pa_ind = (rtk_bt_le_pa_ind_t *)param;
@@ -870,9 +873,15 @@ int ble_tizenrt_scatternet_main(uint8_t enable)
         BT_APP_PROCESS(rtk_bt_evt_register_callback(RTK_BT_LE_GP_GATTC, 
                                                     (rtk_bt_evt_cb_t)ble_tizenrt_scatternet_gattc_app_callback));
         BT_APP_PROCESS(general_client_add());
+#if (defined(RTK_BT_POWER_CONTROL_SUPPORT) && RTK_BT_POWER_CONTROL_SUPPORT)
+		rtk_bt_power_save_init();
+#endif
 	}
 	else if (0 == enable)
     {
+#if (defined(RTK_BT_POWER_CONTROL_SUPPORT) && RTK_BT_POWER_CONTROL_SUPPORT)
+		rtk_bt_power_save_deinit();
+#endif
 		BT_APP_PROCESS(general_client_delete());
 
         /* no need to unreg callback here, it is done in rtk_bt_disable */
