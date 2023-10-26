@@ -9,7 +9,7 @@
 #include "gic.h"
 #include "psci.h"
 
-#define GIC_MAX_NUM_INTR (96+32)
+#define GIC_MAX_NUM_INTR NR_IRQS
 #define ROUND_UP(divider, divisor) (divider%divisor) ? ((divider/divisor)+1) : (divider/divisor)
 
 
@@ -94,23 +94,23 @@ void SOCPS_Save_GIC(void)
 	gic_regs.primask = sys_read32(GIC_ICCPMR);
 
 	for (i = 0; i < (ROUND_UP(GIC_MAX_NUM_INTR, 32)); i++) {
-		gic_regs.intr_enable[i] = sys_read32(GIC_ICDISER(i * 4));
+		gic_regs.intr_enable[i] = sys_read32(GIC_ICDISER(i << 5));
 	}
 
 	for (i = 0; i < (ROUND_UP(GIC_MAX_NUM_INTR, 32)); i++) {
-		gic_regs.intr_active[i] = sys_read32(GIC_ICDSAR(i * 4));
+		gic_regs.intr_active[i] = sys_read32(GIC_ICDSAR(i << 5));
 	}
 
 	for (i = 0; i < (ROUND_UP(GIC_MAX_NUM_INTR, 16)); i++) {
-		gic_regs.intr_config[i] = sys_read32(GIC_ICDICFR(i * 4));
+		gic_regs.intr_config[i] = sys_read32(GIC_ICDICFR(i << 4));
 	}
 
 	for (i = 0; i < (ROUND_UP(GIC_MAX_NUM_INTR, 4)); i++) {
-		gic_regs.intr_target[i] = sys_read32(GIC_ICDIPTR(i * 4));
+		gic_regs.intr_target[i] = sys_read32(GIC_ICDIPTR(i << 2));
 	}
 
 	for (i = 0; i < (ROUND_UP(GIC_MAX_NUM_INTR, 4)); i++) {
-		gic_regs.intr_pri[i] = sys_read32(GIC_ICDIPR(i * 4));
+		gic_regs.intr_pri[i] = sys_read32(GIC_ICDIPR(i << 2));
 	}
 }
 
@@ -123,23 +123,23 @@ void SOCPS_Restore_GIC(void)
 	sys_write32(gic_regs.primask, GIC_ICCPMR);
 
 	for (i = 0; i < (ROUND_UP(GIC_MAX_NUM_INTR, 32)); i++) {
-		sys_write32(gic_regs.intr_enable[i], GIC_ICDISER(i * 4));
+		sys_write32(gic_regs.intr_enable[i], GIC_ICDISER(i << 5));
 	}
 
 	for (i = 0; i < (ROUND_UP(GIC_MAX_NUM_INTR, 32)); i++) {
-		sys_write32(gic_regs.intr_active[i], GIC_ICDSAR(i * 4));
+		sys_write32(gic_regs.intr_active[i], GIC_ICDSAR(i << 5));
 	}
 
 	for (i = 0; i < (ROUND_UP(GIC_MAX_NUM_INTR, 16)); i++) {
-		sys_write32(gic_regs.intr_config[i], GIC_ICDICFR(i * 4));
+		sys_write32(gic_regs.intr_config[i], GIC_ICDICFR(i << 4));
 	}
 
 	for (i = 0; i < (ROUND_UP(GIC_MAX_NUM_INTR, 4)); i++) {
-		sys_write32(gic_regs.intr_target[i], GIC_ICDIPTR(i * 4));
+		sys_write32(gic_regs.intr_target[i], GIC_ICDIPTR(i << 2));
 	}
 
 	for (i = 0; i < (ROUND_UP(GIC_MAX_NUM_INTR, 4)); i++) {
-		sys_write32(gic_regs.intr_pri[i], GIC_ICDIPR(i * 4));
+		sys_write32(gic_regs.intr_pri[i], GIC_ICDIPR(i << 2));
 	}
 
 	val = sys_read32(GIC_ICCICR);
@@ -177,12 +177,12 @@ void SOCPS_SleepPG(void)
 
 	printf("pg-s1\n");
 	cpu_suspend(0, SOCPS_PG_Enter);
-	printf("pg-s2\n");
+	// printf("pg-s2\n");
 
 	//restore gic registers
 	SOCPS_Restore_GIC();
 
-	printf("pg-w\n");
+	// printf("pg-w\n");
 	/* exec sleep hook functions */
 	pmu_exec_wakeup_hook_funs(PMU_MAX);
 
