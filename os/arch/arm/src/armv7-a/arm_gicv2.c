@@ -590,7 +590,7 @@ int up_irq_is_pending(int irq)
 	int_grp = irq / 32;
 	int_off = irq % 32;
 
-	enabler = getreg32(GIC_ICDISPR(int_grp * 4));
+  enabler = getreg32(GIC_ICDISPR(int_grp << 5));
 
 	return (enabler & (1 << int_off)) != 0;
 }
@@ -602,7 +602,7 @@ void up_set_pending_irq(int irq)
 	int_grp = irq / 32;
 	int_off = irq % 32;
 
-	putreg32((1 << int_off), GIC_ICDISPR(int_grp * 4));
+  putreg32((1 << int_off), GIC_ICDISPR(int_grp << 5));
 }
 
 void up_clear_pending_irq(int irq)
@@ -612,7 +612,7 @@ void up_clear_pending_irq(int irq)
 	int_grp = irq / 32;
 	int_off = irq % 32;
 
-	putreg32((1 << int_off), GIC_ICDICPR_OFFSET(int_grp * 4));
+	putreg32((1 << int_off), GIC_ICDICPR(int_grp << 5));
 }
 
 #endif /* CONFIG_ARMV7A_HAVE_GICv2 */

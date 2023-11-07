@@ -231,7 +231,10 @@ int vsyslog(int priority, FAR const char *fmt, va_list ap)
 #if defined(CONFIG_LOGM) && defined(CONFIG_SYSLOG2LOGM)
 		ret = logm_internal(LOGM_NORMAL, LOGM_UNKNOWN, priority, fmt, ap);
 #else
-		ret = vsyslog_internal(fmt, ap);
+		// irqstate_t flags = irqsave();
+		// ret = vsyslog_internal(fmt, ap);
+		ret = 0;
+		// irqrestore(flags);
 #endif
 	}
 

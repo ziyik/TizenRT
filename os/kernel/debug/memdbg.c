@@ -99,7 +99,9 @@ void display_memory_information(void)
 	/* Print HEAP configuration */
 
 	for (heap_idx = 0; heap_idx < CONFIG_KMM_NHEAPS; heap_idx++) {
+#if CONFIG_KMM_REGIONS > 1
 		mllwdbg("Heap[%d] : size = %u, number of regions = %d\n", heap_idx, kheap[heap_idx].mm_heapsize, kheap[heap_idx].mm_nregions);
+#endif
 		region_idx = 0;
 #if CONFIG_KMM_REGIONS > 1
 		for (; region_idx < kheap[heap_idx].mm_nregions; region_idx++)

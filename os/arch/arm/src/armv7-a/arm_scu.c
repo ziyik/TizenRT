@@ -137,6 +137,50 @@ static inline void arm_set_actlr(uint32_t actlr)
   );
 }
 
+#ifdef CONFIG_ARCH_CORTEXA32
+/****************************************************************************
+ * Name: arm_get_cpuectlr
+ *
+ * Description:
+ *   Get the contents of the CPUETLR register
+ *
+ ****************************************************************************/
+
+static inline uint32_t arm_get_cpuectlr(void)
+{
+  uint32_t cpuectlr;
+
+  __asm__ __volatile__
+  (
+    "\tmrrc  p15, 0, %0, r1, c15\n"  /* Read CPUECTLR */
+    : "=r"(cpuectlr)
+    :
+    :
+  );
+
+  return cpuectlr;
+}
+
+/****************************************************************************
+ * Name: arm_set_cpuectlr
+ *
+ * Description:
+ *   Set the contents of the CPUETLR register
+ *
+ ****************************************************************************/
+
+static inline void arm_set_cpuectlr(uint32_t cpuectlr)
+{
+  __asm__ __volatile__
+  (
+    "\tmcrr p15, 1, %0, r1, c15\n" /* Write CPUECTLR */
+    :
+    : "r"(cpuectlr)
+    :
+  );
+}
+#endif
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -218,6 +262,12 @@ void arm_enable_smp(int cpu)
   regval |= ACTLR_FW;
 #endif
   arm_set_actlr(regval);
+
+#ifdef CONFIG_ARCH_CORTEXA32
+  // regval = arm_get_cpuectlr();
+  // regval |= ACTLR_SMP;
+  // arm_set_cpuectlr(regval);
+#endif
 
   regval  = arm_get_sctlr();
   regval |= SCTLR_C;

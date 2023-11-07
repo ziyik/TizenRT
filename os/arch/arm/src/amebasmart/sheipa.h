@@ -18,10 +18,15 @@
 #endif
 #include "FreeRTOS.h"
 #include "arm_gic.h"
-#endif
-#include "arch_timer.h"
 #include "spinlock.h"
+#endif
+
+#include "arm_internal.h"
+#include "gic.h"
+
+#include "arch_timer.h"
 #include "psci.h"
+#include "sys_io.h"
 
 #define IRQ_PRIO_DEFAULT		0xa0
 #define GIC_MAX_NUM_INTR		(32+96)
@@ -31,6 +36,7 @@
 
 #ifndef _ASMLANGUAGE
 
+typedef long BaseType_t;
 typedef uint32_t (*ISRCallback_t)(void *context);
 
 typedef struct InterruptTable {

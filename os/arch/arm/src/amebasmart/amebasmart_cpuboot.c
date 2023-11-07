@@ -106,8 +106,8 @@ void amebasmart_cpu_disable(void)
 // Refer to vPortSecondaryStart
 void amebasmart_cpu_enable(void)
 {
-  psci_init();
-  // smp_init();
+  //psci_init();
+  smp_init();
 }
 
 /****************************************************************************
@@ -170,6 +170,11 @@ void arm_cpu_boot(int cpu)
   /* And finally, enable interrupts */
 
   up_irq_enable();
+#endif
+
+#ifdef CONFIG_ARCH_CORTEXA32
+  /* Secondary core is up, set cpu state to CPU1_RUNNING */
+  // pmu_set_secondary_cpu_state(1, CPU1_RUNNING);
 #endif
 
   /* The next thing that we expect to happen is for logic running on CPU0

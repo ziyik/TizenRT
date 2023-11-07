@@ -119,8 +119,6 @@ void up_timer_initialize(void)
 
   /* Disable GPT interrupts at the GIC */
   up_disable_irq(ARM_ARCH_TIMER_IRQ);
-  /* Configure as a (rising) edge-triggered interrupt */
-  // arm_gic_irq_trigger(ARM_ARCH_TIMER_IRQ, true);
 
   /* Attach the timer interrupt vector */
   irq_attach(ARM_ARCH_TIMER_IRQ, (xcpt_t)up_timerisr, NULL);
@@ -131,6 +129,8 @@ void up_timer_initialize(void)
 
   /* And enable the timer interrupt at the GIC */
   up_prioritize_irq(ARM_ARCH_TIMER_IRQ, 224);
+  /* Configure as a (non) edge-triggered interrupt */
+  arm_gic_irq_trigger(ARM_ARCH_TIMER_IRQ, false);
   up_enable_irq(ARM_ARCH_TIMER_IRQ);
 }
 

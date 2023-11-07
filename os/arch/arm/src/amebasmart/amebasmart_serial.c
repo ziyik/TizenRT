@@ -1151,8 +1151,6 @@ static void rtl8730e_up_txint(struct uart_dev_s *dev, bool enable)
 	DEBUGASSERT(priv);
 	priv->txint_enable = enable;
 	serial_irq_set(sdrv[uart_index_get(priv->tx)], TxIrq, enable);
-	if (enable)
-		UART_INTConfig(UART_DEV_TABLE[uart_index_get(priv->tx)].UARTx, RUART_BIT_ETBEI, ENABLE);
 }
 
 /****************************************************************************
@@ -1187,6 +1185,52 @@ static bool rtl8730e_up_txempty(struct uart_dev_s *dev)
 }
 
 /****************************************************************************
+ * Name: rtk_loguart/uart_suspend/resume
+ *
+ * Description:
+ *   Suspend or resume serial peripherals for/from sleep modes.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_PM
+static uint32_t rtk_loguart_suspend(uint32_t expected_idle_time, void *param)
+{
+	(void)expected_idle_time;
+	(void)param;
+	rtl8730e_log_up_shutdown(&CONSOLE_DEV);
+	rtl8730e_log_up_detach(&CONSOLE_DEV);
+	return 1;
+}
+
+static uint32_t rtk_loguart_resume(uint32_t expected_idle_time, void *param)
+{
+	(void)expected_idle_time;
+	(void)param;
+	rtl8730e_log_up_attach(&CONSOLE_DEV);
+	rtl8730e_log_up_txint(&CONSOLE_DEV, g_uart4priv.txint_enable);
+	rtl8730e_log_up_rxint(&CONSOLE_DEV, g_uart4priv.rxint_enable);
+	return 1;
+}
+
+static uint32_t rtk_uart_suspend(uint32_t expected_idle_time, void *param)
+{
+	(void)expected_idle_time;
+	(void)param;
+	serial_change_clcksrc(sdrv[uart_index_get(g_uart4priv.tx)], 0);
+	return 1;
+}
+
+static uint32_t rtk_uart_resume(uint32_t expected_idle_time, void *param)
+{
+	(void)expected_idle_time;
+	(void)param;
+	serial_change_clcksrc(sdrv[uart_index_get(g_uart4priv.tx)], 1);
+	return 1;
+}
+#endif
+
+
+/****************************************************************************
  * Name: amebasmart_serial_pmnotify (DUMMY)
  *
  * Description:
@@ -1215,16 +1259,19 @@ static void amebasmart_serial_pmnotify(FAR struct pm_callback_s *cb, int domain,
 	switch (pmstate)
 	{
 		case PM_NORMAL:
-			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
-			amebasmart_serial_pm_setsuspend(false);
+			pmu_unregister_sleep_callback(PMU_LOGUART_DEVICE);
+			pmu_unregister_sleep_callback(PMU_UART1_DEVICE);
 			break;
+
 		case PM_IDLE:
 		case PM_STANDBY:
 			break;
+
 		case PM_SLEEP:
-			printf("\n[%s] - %d, state = %d\n",__FUNCTION__,__LINE__, pmstate);
-			amebasmart_serial_pm_setsuspend(true);
+			pmu_register_sleep_callback(PMU_LOGUART_DEVICE, (PSM_HOOK_FUN)rtk_loguart_suspend, NULL, (PSM_HOOK_FUN)rtk_loguart_resume, NULL);
+			pmu_register_sleep_callback(PMU_UART1_DEVICE, (PSM_HOOK_FUN)rtk_uart_suspend, NULL, (PSM_HOOK_FUN)rtk_uart_resume, NULL);
 			break;
+
 		default:
 			break;
 	}
@@ -1303,7 +1350,6 @@ static int amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
 #ifdef CONFIG_RTL8730E_UART4
 			// LOGUART_TypeDef *UARTLOG = LOGUART_DEV;
 			// if (!(UARTLOG->LOGUART_UART_LSR & LOG_UART_IDX_FLAG[2].empty)) {		/* log UART Tx Empty Check */
-			// 	printf("\n[%s] - %d, UARTLOG->LOGUART_UART_LSR = %d, LOG_UART_IDX_FLAG[2].empty = %d\n",__FUNCTION__,__LINE__, UARTLOG->LOGUART_UART_LSR, LOG_UART_IDX_FLAG[2].empty);
 			// 	return ERROR;
 			// }
 #endif
@@ -1313,99 +1359,6 @@ static int amebasmart_serial_pmprepare(FAR struct pm_callback_s *cb, int domain,
 	}
 
 	return OK;
-}
-#endif
-
-
-#ifdef CONFIG_PM
-static void amebasmart_serial_setsuspend(struct uart_dev_s *dev, bool suspend, bool is_loguart)
-{
-	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
-
-	if (priv->suspended == suspend)
-	{
-		return;
-	}
-
-	priv->suspended = suspend;
-
-	if (suspend)
-	{
-		if (is_loguart) {
-			/* LOGUART is controlled by LP, cannot shut down */
-			rtl8730e_log_up_shutdown(dev);
-			rtl8730e_log_up_detach(dev);
-		}
-		else {
-			/* Disable interrupts to prevent Tx. */
-			if (sdrv[uart_index_get(priv->tx)]) {
-				rtl8730e_up_shutdown(dev);
-			}
-			// rtl8730e_up_detach(dev);
-		}
-
-		/* Wait last Tx to complete. */
-		/* The buffer condition for uart port has already been checked in prepare callback*/
-	}
-	else
-	{
-		/* Re-enable interrupts to resume Tx. */
-		if (is_loguart) {
-			rtl8730e_log_up_attach(dev);
-			rtl8730e_log_up_txint(dev, priv->txint_enable);
-			rtl8730e_log_up_rxint(dev, priv->rxint_enable);
-		}
-		else {
-			// rtl8730e_up_attach(dev);
-			rtl8730e_up_setup_pin(dev);
-			// rtl8730e_up_txint(dev, priv->txint_enable);
-			// rtl8730e_up_rxint(dev, priv->rxint_enable);
-		}
-	}
-}
-#endif
-
-/****************************************************************************
- * Name: amebasmart_serial_pm_setsuspend
- *
- * Description:
- *   Suspend or resume serial peripherals for/from deep-sleep/stop modes.
- *
- ****************************************************************************/
-
-#ifdef CONFIG_PM
-static void amebasmart_serial_pm_setsuspend(bool suspend)
-{
-	/* Already in desired state? */
-
-	if (suspend == g_serialpm.serial_suspended)
-		return;
-
-	g_serialpm.serial_suspended = suspend;
-
-#ifdef TTYS1_DEV
-	struct rtl8730e_up_dev_s *priv0 = (struct rtl8730e_up_dev_s *)g_uart0port.priv;
-	if (priv0 || priv0->initialized)
-	{
-		amebasmart_serial_setsuspend(&g_uart0port, suspend, false);
-	}
-#endif
-
-#ifdef TTYS2_DEV
-	struct rtl8730e_up_dev_s *priv1 = (struct rtl8730e_up_dev_s *)g_uart1port.priv;
-	if (priv1 || priv1->initialized)
-	{
-		amebasmart_serial_setsuspend(&g_uart1port, suspend, false);
-	}
-#endif
-
-#ifdef CONSOLE_DEV
-	struct rtl8730e_up_dev_s *priv4 = (struct rtl8730e_up_dev_s *)g_uart4port.priv;
-	if (priv4 || priv4->initialized)
-	{
-		amebasmart_serial_setsuspend(&g_uart4port, suspend, true);
-	}
-#endif
 }
 #endif
 
@@ -1450,10 +1403,11 @@ void up_serialinit(void)
 #endif
 #ifdef TTYS2_DEV
 	rtl8730e_up_setup_pin(&TTYS2_DEV);
+	// For testing on tx/rx irq functionality
 	// rtl8730e_up_setup(&TTYS2_DEV);
 	// rtl8730e_up_attach(&TTYS2_DEV);
-	// rtl8730e_up_txint(&TTYS2_DEV, g_uart1priv.txint_enable);
-	// rtl8730e_up_rxint(&TTYS2_DEV, g_uart1priv.rxint_enable);
+	// rtl8730e_up_txint(&TTYS2_DEV, 1);
+	// rtl8730e_up_rxint(&TTYS2_DEV, 1);
 	uart_register("/dev/ttyS2", &TTYS2_DEV);
 #endif
 

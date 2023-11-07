@@ -56,11 +56,11 @@ extern void __arm_smccc_smc(unsigned long a0, unsigned long a1,
 
 static unsigned long invoke_psci_fn(unsigned long function_id,
 									unsigned long arg0, unsigned long arg1,
-									unsigned long arg2, unsigned long arg3)
+									unsigned long arg2)
 {
 	struct arm_smccc_res res;
 
-	arm_smccc_smc(function_id, arg0, arg1, arg2, arg3, 0, 0, 0, &res);
+	arm_smccc_smc(function_id, arg0, arg1, arg2, 0, 0, 0, 0, &res);
 	return res.a0;
 }
 
@@ -83,19 +83,19 @@ static int psci_to_linux_errno(int err)
 
 uint32_t psci_get_version(void)
 {
-	return invoke_psci_fn(PSCI_0_2_FN_PSCI_VERSION, 0, 0, 0, 0);
+	return invoke_psci_fn(PSCI_0_2_FN_PSCI_VERSION, 0, 0, 0);
 }
 
 int psci_cpu_suspend(uint32_t state, unsigned long entry_point)
 {
-	return invoke_psci_fn(PSCI_FN_NATIVE(0_2, CPU_SUSPEND), state, entry_point, 0, 0);
+	return invoke_psci_fn(PSCI_FN_NATIVE(0_2, CPU_SUSPEND), state, entry_point, 0);
 }
 
 int psci_cpu_off(uint32_t state)
 {
 	int err;
 
-	err = invoke_psci_fn(PSCI_0_2_FN_CPU_OFF, state, 0, 0, 0);
+	err = invoke_psci_fn(PSCI_0_2_FN_CPU_OFF, state, 0, 0);
 	return psci_to_linux_errno(err);
 }
 
@@ -103,14 +103,14 @@ int psci_cpu_on(unsigned long cpuid, unsigned long entry_point)
 {
 	int err;
 
-	err = invoke_psci_fn(PSCI_FN_NATIVE(0_2, CPU_ON), cpuid, entry_point, 0, 0);
+	err = invoke_psci_fn(PSCI_FN_NATIVE(0_2, CPU_ON), cpuid, entry_point, 0);
 	return psci_to_linux_errno(err);
 }
 
 int psci_migrate(unsigned long cpuid)
 {
 	int err;
-	err = invoke_psci_fn(PSCI_FN_NATIVE(0_2, MIGRATE), cpuid, 0, 0, 0);
+	err = invoke_psci_fn(PSCI_FN_NATIVE(0_2, MIGRATE), cpuid, 0, 0);
 	return psci_to_linux_errno(err);
 }
 
@@ -118,28 +118,28 @@ int psci_affinity_info(unsigned long target_affinity,
 					   unsigned long lowest_affinity_level)
 {
 	return invoke_psci_fn(PSCI_FN_NATIVE(0_2, AFFINITY_INFO),
-						  target_affinity, lowest_affinity_level, 0, 0);
+						  target_affinity, lowest_affinity_level, 0);
 }
 
 int psci_migrate_info_type(void)
 {
-	return invoke_psci_fn(PSCI_0_2_FN_MIGRATE_INFO_TYPE, 0, 0, 0, 0);
+	return invoke_psci_fn(PSCI_0_2_FN_MIGRATE_INFO_TYPE, 0, 0, 0);
 }
 
 unsigned long psci_migrate_info_up_cpu(void)
 {
 	return invoke_psci_fn(PSCI_FN_NATIVE(0_2, MIGRATE_INFO_UP_CPU),
-						  0, 0, 0, 0);
+						  0, 0, 0);
 }
 
 void psci_sys_reset(void)
 {
-	invoke_psci_fn(PSCI_0_2_FN_SYSTEM_RESET, 0, 0, 0, 0);
+	invoke_psci_fn(PSCI_0_2_FN_SYSTEM_RESET, 0, 0, 0);
 }
 
 void psci_sys_poweroff(void)
 {
-	invoke_psci_fn(PSCI_0_2_FN_SYSTEM_OFF, 0, 0, 0, 0);
+	invoke_psci_fn(PSCI_0_2_FN_SYSTEM_OFF, 0, 0, 0);
 }
 
 /*
@@ -153,7 +153,6 @@ static void psci_init_migrate(void)
 
 	type = psci_migrate_info_type();
 
-	printf("\n[%s] - %d, type = %08x\n",__FUNCTION__,__LINE__, type);
 	if (type == PSCI_0_2_TOS_MP) {
 		printf("Trusted OS migration not required\n");
 		return;
@@ -171,7 +170,6 @@ static void psci_init_migrate(void)
 	}
 
 	cpuid = psci_migrate_info_up_cpu();
-	printf("\n[%s] - %d, type = %08x\n",__FUNCTION__,__LINE__, cpuid);
 	if (cpuid & ~0xFFFFFF) {
 		printf("MIGRATE_INFO_UP_CPU reported invalid physical ID (0x%lx)\n",
 					 cpuid);
@@ -183,9 +181,10 @@ static void psci_init_migrate(void)
 
 int psci_init(void)
 {
-	printf("\n[%s] - %d\n",__FUNCTION__,__LINE__);
 	uint32_t ver = psci_get_version();
 
+	printf("psci: init ...\n");
+	// DBG_PRINTF(MODULE_BOOT, LEVEL_INFO, "psci: init ...\n");
 	if (PSCI_VERSION_MAJOR(ver) == 0 && PSCI_VERSION_MINOR(ver) < 2) {
 		printf("Conflicting PSCI version detected.\n");
 		return -EINVAL;

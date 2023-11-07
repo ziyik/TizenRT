@@ -78,7 +78,11 @@ void vPortSecondaryOff(void)
 
 	/* Notify secondary core to migrate task to primary core and enter wfi*/
 	pmu_set_secondary_cpu_state(1, CPU1_HOTPLUG);
+#ifndef CONFIG_PLATFORM_TIZENRT_OS
 	arm_gic_raise_softirq(1, 1);
+#else
+	sys_write32(1 << (16 + 1) | 1, GIC_ICDSGIR);
+#endif
 #endif
 	//add a delay to wait cpu1 enter wfi.
 	DelayUs(100);
@@ -87,7 +91,7 @@ void vPortSecondaryOff(void)
 	do {
 		state  = psci_affinity_info(1, 0);
 		if (state == 1) {
-			printf("cpu1 power off\n");
+			// printf("cpu1 power off\n");
 			rtk_core1_power_off();
 			return;
 		}
@@ -95,13 +99,13 @@ void vPortSecondaryOff(void)
 		DelayUs(50);
 	} while (count--);
 
-	debug_printf("Secondary core power off fail: %d\n", state);
+	// printf("Secondary core power off fail: %d\n", state);
 }
 
 #ifndef CONFIG_PLATFORM_TIZENRT_OS
 void vPortSecondaryStart(void)
 {
-	debug_printf("CPU%d: on\n", (int)portGET_CORE_ID());
+	printf("CPU%d: on\n", (int)portGET_CORE_ID());
 
 	/* Wait until scheduler starts */
 	if (pmu_get_secondary_cpu_state(portGET_CORE_ID()) == CPU1_RUNNING)
@@ -131,10 +135,15 @@ void smp_init(void)
 	BaseType_t xCoreID;
 	BaseType_t err;
 
-	debug_printf("smp: Bringing up secondary CPUs ...\n");
+	// printf("smp: Bringing up secondary CPUs ...\n");
+	// DBG_PRINTF(MODULE_BOOT, LEVEL_INFO, "smp: Bringing up secondary CPUs ...\n");
 
 #if ( configNUM_CORES > 1 )
+#ifndef CONFIG_PLATFORM_TIZENRT_OS
 	if (SYSCFG_CHIPType_Get() != CHIP_TYPE_RTLSIM) {//RTL sim shall not use delayus before core1 ready
+else
+	{
+#endif
 		/* power on core1 to avoid km4 not open it */
 		rtk_core1_power_on();
 		DelayUs(50);
@@ -144,6 +153,7 @@ void smp_init(void)
 	rtk_core1_power_off();
 #endif
 
+#if ( configNUM_CORES > 1 )
 	for (xCoreID = 0; xCoreID < configNUM_CORES; xCoreID++) {
 		if (xCoreID == up_cpu_index()) {
 			pmu_set_secondary_cpu_state(xCoreID, CPU1_RUNNING);
@@ -152,8 +162,8 @@ void smp_init(void)
 
 		err = psci_cpu_on(xCoreID, (unsigned long)__cpu1_start);
 		if (err < 0) {
-			debug_printf("CPU%d: failed to boot: %d\n", (int)xCoreID, (int)err);
+			printf("CPU%d: failed to boot: %d\n", (int)xCoreID, (int)err);
 		}
 	}
-
+#endif
 }

@@ -371,7 +371,9 @@ __start:
 
 	orr		r1, r5, #(TTBR0_RGN_WBWA | TTBR0_IRGN0)	/* Select cache properties */
 	mcr		CP15_TTBR0(r1)
+#ifndef CONFIG_ARCH_CORTEXA32
 	mcr		CP15_TTBR1(r1)
+#endif
 
 	/* Set the TTB control register (TTBCR) to indicate that we are using
 	 * TTBR0.  r0 still holds the value of zero.
@@ -409,12 +411,12 @@ __start:
 	 *   SCTLR_A    Bit 1:  Strict alignment disabled (reset value)
 	 *   SCTLR_C    Bit 2:  DCache disabled (reset value)
 	 *
-	 *   SCTLR_SW   Bit 10: SWP/SWPB not enabled (reset value)
+	 *   SCTLR_SW   Bit 10: SWP/SWPB not enabled (reset value), Reserved bit on A32
 	 *   SCTLR_I    Bit 12: ICache disabled (reset value)
 	 *   SCTLR_V    Bit 13: Assume low vectors (reset value)
 	 *   SCTLR_RR   Bit 14: The Cortex-A5 processor only supports a fixed random
-	 *                      replacement strategy.
-	 *   SCTLR_HA   Bit 17: Not supported by A5
+	 *                      replacement strategy. Reserved bit on A32
+	 *   SCTLR_HA   Bit 17: Not supported by A5, Reserved bit on A32
 	 *
 	 *   SCTLR_EE   Bit 25: 0=Little endian (reset value).
 	 *   SCTLR_TRE  Bit 28: No memory region remapping (reset value)
@@ -423,17 +425,21 @@ __start:
 	 */
 
 	bic		r0, r0, #(SCTLR_A  | SCTLR_C)
+#ifndef CONFIG_ARCH_CORTEXA32
 	bic		r0, r0, #(SCTLR_SW | SCTLR_I   | SCTLR_V   | SCTLR_RR | SCTLR_HA)
+#else
+	bic		r0, r0, #(SCTLR_I  | SCTLR_V)
+#endif
 	bic		r0, r0, #(SCTLR_EE | SCTLR_TRE | SCTLR_AFE | SCTLR_TE)
 
 	/* Set bits to enable the MMU
 	 *
 	 *   SCTLR_M     Bit 0:  Enable the MMU
-	 *   SCTLR_Z     Bit 11: Program flow prediction control always enabled on A5
+	 *   SCTLR_Z     Bit 11: Program flow prediction control always enabled on A5, Reserved bit on A32
 	 */
 
 	orr		r0, r0, #(SCTLR_M)
-#ifndef CONFIG_ARCH_CORTEXA5
+#if !defined(CONFIG_ARCH_CORTEXA5) && !defined(CONFIG_ARCH_CORTEXA32)
 	orr		r0, r0, #(SCTLR_Z)
 #endif
 

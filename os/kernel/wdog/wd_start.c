@@ -463,7 +463,7 @@ void wd_timer(void)
 }
 #endif							/* CONFIG_SCHED_TICKLESS */
 
-// #ifdef CONFIG_SCHED_TICKSUPPRESS
+//#ifdef CONFIG_SCHED_TICKSUPPRESS
 void wd_timer_nohz(int ticks)
 {
 	int ret;
@@ -493,4 +493,4 @@ void wd_timer_nohz(int ticks)
 
 	return ret;
 }
-// #endif
+//#endif

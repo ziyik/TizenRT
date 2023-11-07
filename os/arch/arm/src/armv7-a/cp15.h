@@ -20,10 +20,10 @@
 
 /* References:
  *
- *  "Cortex-A5™ MPCore, Technical Reference Manual", Revision: r0p1,
- *   Copyright © 2010 ARM. All rights reserved. ARM DDI 0434B (ID101810)
- *  "ARM® Architecture Reference Manual, ARMv7-A and ARMv7-R edition",
- *   Copyright © 1996-1998, 2000, 2004-2012 ARM. All rights reserved.
+ *  "Cortex-A5ï¿½ MPCore, Technical Reference Manual", Revision: r0p1,
+ *   Copyright ï¿½ 2010 ARM. All rights reserved. ARM DDI 0434B (ID101810)
+ *  "ARMï¿½ Architecture Reference Manual, ARMv7-A and ARMv7-R edition",
+ *   Copyright ï¿½ 1996-1998, 2000, 2004-2012 ARM. All rights reserved.
  * ARM DDI 0406C.b (ID072512)
  */
 
@@ -55,7 +55,7 @@
  *   <CRm> is the operational register
  *   <Op2> is the Opcode_2 value for the register.
  *
- * Reference: Cortex-A5™ MPCore, Technical Reference Manual, Paragraph 4.2.
+ * Reference: Cortex-A5ï¿½ MPCore, Technical Reference Manual, Paragraph 4.2.
  */
 
 #define _CP15(op1,rd,crn,crm,op2) p15, op1, rd, crn, crm, op2
@@ -162,7 +162,11 @@
 #define CP15_PMINTENCLR(r) _CP15(0, r, c9, c14, 2)  /* Interrupt Enable Clear Register */
 
 #define CP15_TLBLCKDOWN(r) _CP15(0, r, c10, c0, 0)  /* TLB Lockdown register (Cortex-A9) */
+#ifndef CONFIG_ARCH_CORTEXA32
 #define CP15_PPRRR(r)      _CP15(0, r, c10, c2, 0)  /* Primary Region Remap Register */
+#else
+#define CP15_MAIR0(r)      _CP15(0, r, c10, c2, 0)  /* Memory Attribute Indirection Register 0 */
+#endif
 #define CP15_NMRR(r)       _CP15(0, r, c10, c2, 1)  /* Normal Memory Remap Register */
 
 #define CP15_PLEIDR(r)     _CP15(0, r, c11, c0, 0)  /* PLE ID Register (Cortex-A9) */

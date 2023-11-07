@@ -552,6 +552,23 @@ void serial_baud(serial_t *obj, int baudrate)
 	}
 }
 
+#ifdef CONFIG_PLATFORM_TIZENRT_OS
+/**
+  * @brief  Set UART device ClockSource.
+  * @param  obj: UART object defined in application software.
+  * @param  high_low: Change clock source before/after sleep
+  * @retval none
+  */
+
+void serial_change_clcksrc(serial_t *obj, bool high_low)
+{
+	PMBED_UART_ADAPTER puart_adapter = &(uart_adapter[obj->uart_idx]);
+
+	high_low == 1 ? RCC_PeriphClockSource_UART(puart_adapter->UARTx, UART_RX_CLK_XTAL_40M) : 
+					RCC_PeriphClockSource_UART(puart_adapter->UARTx, UART_RX_CLK_OSC_LP);
+}
+#endif
+
 /**
   * @brief  Set UART format.
   * @param  obj: UART object defined in application software.

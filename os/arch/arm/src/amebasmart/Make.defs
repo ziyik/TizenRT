@@ -261,6 +261,11 @@ endif
 ifeq ($(CONFIG_AMEBASMART_TRUSTZONE),y)
 #CHIP_CSRCS += amebasmart_nsc.c
 
+ifeq ($(CONFIG_SMP),y)
+  CHIP_CSRCS += psci.c smp.c
+#CHIP_CSRCS += a32_pm.S
+endif
+
 # trustzone library
 ifeq ($(CONFIG_ARCH_FPU),y)
 #EXTRA_LIBS += ${TOPDIR}/board/
