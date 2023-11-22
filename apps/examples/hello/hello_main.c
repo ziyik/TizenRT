@@ -57,6 +57,8 @@
 #include <tinyara/config.h>
 #include <stdio.h>
 
+#include <pm/pm.h>
+
 /****************************************************************************
  * hello_main
  ****************************************************************************/
@@ -68,5 +70,46 @@ int hello_main(int argc, char *argv[])
 #endif
 {
 	printf("Hello, World!!\n");
+	/* Call stay IOCTL to keep PM domain in current state because maybe we know we need to do some
+	 * non-frequent work with time gaps and dont want the board to sleep in between
+	 */
+	pm_ioctl(PM_IOC_STAY);
+
+	{
+		//The work happens
+	}
+
+	/* The work is done, now relax the stay on the current state of the domain */
+	pm_ioctl(PM_IOC_RELAX);
+
+	{
+		//App does some other non-blocking work
+	}
+
+	/* Now, maybe the app has completed the major part of its work and is suggesting that the board
+	 * can go to sleep, given that there is nothing else going on.
+	 * This does not mean that the board will immediately be put to sleep. If there is a stay applied
+	 * by another application, then this SLEEP request will be DISCARDED(can be discussed if otherwise).
+	 */
+	pm_ioctl(PM_IOC_SLEEP);
+
+	/* However, as discussed before, we may need the application to request/suggest the core to go to
+	 * sleep for a specified amount of time. Alternatively, the application may want the core to be woken up at
+	 * a specific timestamp when it expects to be able to do resume some work. In this case, the application
+	 * should be able to request sleep with a timed interrupt.
+	 */
+	//pm_ioctl(PM_IOC_TIMEDSLEEP, <second argument for timed interval>, \
+			<third argument for current time so that timer interrupt can be adjusted for elapsed time>)
+
+	/* NOTE: At the beginning of this process, it seems that PM_IOC_RELAX and PM_IOC_SLEEP are similar in the
+	 * way that both will result in the drop of PM state if feasible, and otherwise not make any state changes.
+	 * PM_IOC_RELAX wil reduce the staycount by 1 i.e. enabling natural state transition thereafter, and 
+	 * PM_IOC_SLEEP will try to invoke sleep immediately, but may be rejected and discarded.
+	 *
+	 * Hence, it is also noteworthy that: -
+	 * pm_ioctl(PM_IOC_STAY);
+	 * pm_ioctl(PM_IOC_RELAX); -> PM_IOC_RELAX has to be used after PM_IOC_STAY otherwise domain's state transition will be blocked
+	 * pm_ioctl(PM_IOC_SLEEP);
+	 */
 	return 0;
 }

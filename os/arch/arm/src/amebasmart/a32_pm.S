@@ -102,7 +102,9 @@ cpu_resume:
 	isb
 	dsb
 
-	mcr	p15, 0, r8, c1, c0, 0				@ restore SCTLR. cache and mmu will be enabled. it is safe because of 1:1 mapping
+	/* Need to check why restoring SCTLR cause hanging on some boards, comment it as workaround first */
+	@ mcr	p15, 0, r8, c1, c0, 0				@ restore SCTLR. cache and mmu will be enabled. it is safe because of 1:1 mapping
+#	mcr	p15, 0, r8, c1, c0, 0				@ restore SCTLR. cache and mmu will be enabled. it is safe because of 1:1 mapping
 
 	restore_regs	#CPSR_MODE_IRQ			@ restore spsr, lr, sp for irq, fiq, abt, und, svc mode.
 	restore_regs	#CPSR_MODE_FIQ

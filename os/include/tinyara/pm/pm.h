@@ -297,6 +297,14 @@ enum pm_state_e {
 	PM_COUNT,
 };
 
+/* Commands for pm_ioctl, open for discussion and consideration */
+enum pm_ioctl_cmds {
+        PM_IOC_NOCMD = 0;
+        PM_IOC_STAY;
+        PM_IOC_RELAX;
+        PM_IOC_SLEEP;
+}
+
 /* This structure contain pointers callback functions in the driver.  These
  * callback functions can be used to provide power management information
  * to the driver.
@@ -610,6 +618,31 @@ int pm_changestate(int domain, enum pm_state_e newstate);
  ****************************************************************************/
 
 enum pm_state_e pm_querystate(int domain);
+
+/****************************************************************************
+ * Name: pm_ioctl
+ *
+ * Description:
+ *   This function can be called from applications running on TizenRT to
+ *   request/enable/disable power state transitions. This function conveys
+ *   the request from the application to the PM module, which thereafter
+ *   checks the feasibility of the requests. There is no returned value.
+ *
+ *   The power management state is not automatically changed, however.
+ *   up_idlepm() must be called in order to make the state change.
+ *
+ *   These two steps are separated because the application is not supposed
+ *   to invoke power state changes directly, it can only request/suggest.
+ *
+ * Input Parameters:
+ *   domain - the PM domain to check
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void pm_ioctl(enum pm_ioctl_cmds cmd);
 
 #undef EXTERN
 #ifdef __cplusplus
