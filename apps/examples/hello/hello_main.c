@@ -56,10 +56,102 @@
 
 #include <tinyara/config.h>
 #include <stdio.h>
+#include <ble_manager/ble_manager.h>
 
 /****************************************************************************
  * hello_main
  ****************************************************************************/
+static int g_scan_state = -1;
+static ble_scan_callback_list scan_config = {
+	ble_scan_state_changed_cb,
+	NULL,
+};
+
+static void ble_scan_state_changed_cb(ble_scan_state_e scan_state)
+{
+	printf("'%s' is called[%d]\n", __FUNCTION__, scan_state);
+	if (scan_state == BLE_SCAN_STOPPED) {
+		g_scan_state = 0;
+	} else if (scan_state == BLE_SCAN_STARTED) {
+		g_scan_state = 1;
+	}
+	return;
+}
+
+uint8_t scan_count = 0;
+static void ble_device_scanned_cb_for_test(ble_scanned_device *scanned_device)
+{
+	scan_count++;
+	if (scan_count > 250) {
+		printf("scan_count done[%d]\n", scan_count);
+		scan_count = 0;
+	}
+}
+
+static void *_test_BLE_thread(void *data)
+{
+	ble_result_e ret = BLE_MANAGER_FAIL;
+
+	while(1) {
+		/* BLE Init */
+		ret = ble_manager_init(NULL);
+		if (ret != BLE_MANAGER_SUCCESS) {
+			if (ret != BLE_MANAGER_ALREADY_WORKING) {
+				printf("init with null fail[%d]\n", ret);
+				goto ble_rmc_done;
+			}
+			printf("init is already done\n");
+		} else {
+			printf("init with NULL done[%d]\n", ret);
+		}
+
+		/* Scan Start */
+		printf("Scan Start without filter !\n");
+		scan_config.device_scanned_cb = ble_device_scanned_cb_for_test;
+		ret = ble_client_start_scan(NULL, &scan_config);
+
+		if (ret != BLE_MANAGER_SUCCESS) {
+			printf("scan start fail[%d]\n", ret);
+			goto ble_rmc_done;
+		}
+
+
+		msleep(100);
+		ret = ble_server_start_adv();	/* Adv Start */
+		if (ret != BLE_MANAGER_SUCCESS) {
+			printf("Fail to start adv [%d]\n", ret);
+			goto ble_rmc_done;
+		}
+		printf("Start adv ... ok\n");
+
+
+
+		msleep(100);
+		ret = ble_server_stop_adv();	/* Adv Stop */
+		if (ret != BLE_MANAGER_SUCCESS) {
+			printf("Fail to stop adv [%d]\n", ret);
+			goto ble_rmc_done;
+		}
+		printf("Stop adv ... ok\n");
+
+		/* Scan Stop */
+		printf("stop !\n");
+		ret = ble_client_stop_scan();
+		if (ret != BLE_MANAGER_SUCCESS) {
+			printf("scan stop fail[%d]\n", ret);
+			goto ble_rmc_done;
+		}
+
+		/* Deinit */
+		ret = ble_manager_deinit();
+		printf("deinit done[%d]\n", ret);
+	}
+
+ble_rmc_done:
+	printf("done\n");
+	return 0;
+}
+
 
 #ifdef CONFIG_BUILD_KERNEL
 int main(int argc, FAR char *argv[])
