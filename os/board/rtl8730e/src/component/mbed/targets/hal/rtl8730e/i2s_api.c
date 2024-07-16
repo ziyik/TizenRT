@@ -21,6 +21,8 @@
 #include "amebasmart_i2s.h"
 
 #define SP_MAX_DMA_PAGE_NUM 8
+//#define I2S_EQ 1
+
 
 /** @addtogroup Ameba_Mbed_API
   * @{
@@ -169,6 +171,9 @@ static void i2s_tx_isr(void *sp_data)
 	GDMA_InitStruct = &(gs->SpTxGdmaInitStruct);
 
 	uint8_t i2s_index = gs->i2s_idx;
+#if defined(I2S_EQ)
+	i2s_index = I2S1;	/* If EQ is enable date should be push to I2S1 */
+#endif
 
 	/* Clear Pending ISR */
 	GDMA_ClearINT(GDMA_InitStruct->GDMA_Index, GDMA_InitStruct->GDMA_ChNum);
@@ -176,8 +181,6 @@ static void i2s_tx_isr(void *sp_data)
 	i2s_release_tx_page(i2s_index);
 	pbuf = i2s_get_ready_tx_page(i2s_index);
 	I2SUserCB.TxCCB(I2SUserCB.TxCBId, (char*)pbuf);
-
-
 }
 #endif
 
@@ -309,6 +312,9 @@ void i2s_tx_irq_handler(i2s_t *obj, i2s_irq_handler handler, uint32_t id)
 	assert_param(IS_SP_SEL_I2S(obj->i2s_idx));
 	
 	uint8_t i2s_index = obj->i2s_idx;
+#if defined(I2S_EQ)
+	i2s_index = I2S1;	/* If EQ is enable date should be push to I2S1 */
+#endif
 	SP_GDMA_STRUCT *sp_str = &SPGdmaStruct;
 
 	sp_str->i2s_idx = i2s_index;	/* Store I2S index */
@@ -319,7 +325,6 @@ void i2s_tx_irq_handler(i2s_t *obj, i2s_irq_handler handler, uint32_t id)
 	i2s_get_ready_tx_page(i2s_index);
 	AUDIO_SP_LLPTXGDMA_Init(i2s_index, GDMA_INT, &sp_str->SpTxGdmaInitStruct, sp_str, (IRQ_FUN)i2s_tx_isr, sp_tx_info.tx_page_size,
 							sp_tx_info.tx_page_num + 1, LliTx);
-	
 }
 #endif
 
@@ -361,6 +366,103 @@ void i2s_set_direction(i2s_t *obj, int trx_type)
 	AUDIO_SP_Init(obj->i2s_idx, obj->direction, &SP_InitStruct);
 }
 
+#if defined(I2S_EQ)
+/**
+  * @brief  Set I2S channel number, sample rate and word length.
+  * @param  i2s_idx: I2S index defined in application software.
+  * @param  channel_num: This parameter can be one of the following values:
+  * @param  rate: This parameter can be one of the following values:
+  * @param  word_len: This parameter can be one of the following values:
+  * @retval none
+  */
+void i2s_set_eq_param(uint8_t i2s_idx, int channel_num, int rate, int word_len)
+{
+	uint32_t clock, clock_mode = 0;
+	uint32_t l_direction;
+	AUDIO_ClockParams Clock_Params;
+	AUDIO_InitParams Init_Params;
+	SP_InitTypeDef l_SP_InitStruct;
+
+	Init_Params.chn_len = SP_CL_32;
+	Init_Params.chn_cnt = channel_num;
+	Init_Params.sr = rate;
+	Init_Params.codec_multiplier_with_rate = 256;
+	Init_Params.sport_mclk_fixed_max = (uint32_t) NULL;
+	Audio_Clock_Choose(PLL_CLK, &Init_Params, &Clock_Params);
+	clock = Clock_Params.Clock;
+
+	switch (Clock_Params.Clock) {
+	case PLL_CLOCK_24P576M:
+		//PLL_I2S_24P576M(ENABLE);
+		RCC_PeriphClockSource_SPORT(i2s_idx, CKSL_I2S_PLL24M);
+		PLL_I2S_Div(i2s_idx, Clock_Params.PLL_DIV);
+		clock_mode = PLL_CLOCK_24P576M / Clock_Params.PLL_DIV;
+		break;
+
+	case PLL_CLOCK_45P1584M:
+		//PLL_I2S_45P158M(ENABLE);
+		RCC_PeriphClockSource_SPORT(i2s_idx, CKSL_I2S_PLL45M);
+		PLL_I2S_Div(i2s_idx, Clock_Params.PLL_DIV);
+		clock_mode = PLL_CLOCK_45P1584M / Clock_Params.PLL_DIV;
+		break;
+
+	case PLL_CLOCK_98P304M:
+	default:
+		//PLL_I2S_98P304M(ENABLE);
+		RCC_PeriphClockSource_SPORT(i2s_idx, CKSL_I2S_PLL98M);
+		PLL_I2S_Div(i2s_idx, Clock_Params.PLL_DIV);
+		clock_mode = PLL_CLOCK_98P304M / Clock_Params.PLL_DIV;
+		break;
+	}
+
+	/* Sport Init */
+	AUDIO_SP_Reset(i2s_idx);
+	//AUDIO_SP_StructInit(&l_SP_InitStruct);
+	memcpy(&l_SP_InitStruct, &SP_InitStruct, sizeof(SP_InitTypeDef));
+	//SP_InitStruct.SP_SelI2SMonoStereo = channel_num;
+	//SP_InitStruct.SP_SelWordLen = word_len;
+	SP_InitStruct.SP_SelFIFO = SP_TX_MULTIIO_EN;
+
+	if (i2s_idx == I2S_NUM_0) {		/* DAAD loopback, I2S0 is Tx, I2S1 is Rx*/
+		l_direction = SP_DIR_TX;
+		l_SP_InitStruct.SP_SelTDM = SP_TX_NOTDM;
+	} else {
+		l_direction = SP_DIR_RX;
+		l_SP_InitStruct.SP_SelTDM = SP_TX_TDM8;
+	}
+
+	l_SP_InitStruct.SP_SelClk = clock_mode;
+	AUDIO_SP_Init(i2s_idx, l_direction, &l_SP_InitStruct);
+}
+
+/**
+  * @brief  Set Sport Look back
+  * @retval none
+  */
+void i2s_set_loopback(void)
+{
+	I2S_InitTypeDef l_I2S_InitStruct;
+
+dbg("AUDIO_CODEC_SetDAADLPBK\n");
+	AUDIO_CODEC_SetDAADLPBK(ENABLE);
+
+dbg("AUDIO_CODEC_I2S_StructInit\n");
+	AUDIO_CODEC_I2S_StructInit(&l_I2S_InitStruct);
+
+dbg("AUDIO_CODEC_Playback\n");
+	/* DAAD loopback, I2S0 is Tx, I2S1 is Rx */ 
+	AUDIO_CODEC_Playback(I2S0, APP_DAAD_LPBK, &l_I2S_InitStruct);
+	l_I2S_InitStruct.CODEC_SelRxI2STdm = I2S_TDM8;
+dbg("AUDIO_CODEC_Record\n");
+	AUDIO_CODEC_Record(I2S1, APP_DAAD_LPBK, &l_I2S_InitStruct);
+
+dbg("AUDIO_SP_SetDirectOutMode\n");
+	AUDIO_SP_SetDirectOutMode(I2S_NUM_0, I2S_NUM_2);// enable
+	AUDIO_SP_SelDirectOutSource(I2S_NUM_0, I2S_NUM_2);//src:1  dir:2
+dbg("Done AUDIO_SP_SetDirectOutMode\n");
+}
+#endif
+
 /**
   * @brief  Set I2S channel number, sample rate and word length.
   * @param  obj: I2S object defined in application software.
@@ -401,7 +503,7 @@ void i2s_set_param(i2s_t *obj, int channel_num, int rate, int word_len)
 
 	Init_Params.chn_len = SP_CL_32;
 	Init_Params.chn_cnt = obj->channel_num;
-	Init_Params.sr = obj->sampling_rate;;
+	Init_Params.sr = obj->sampling_rate;
 	Init_Params.codec_multiplier_with_rate = 256;
 	Init_Params.sport_mclk_fixed_max = (uint32_t) NULL;
 	Audio_Clock_Choose(PLL_CLK, &Init_Params, &Clock_Params);
@@ -446,6 +548,13 @@ void i2s_set_param(i2s_t *obj, int channel_num, int rate, int word_len)
 	if (obj->direction == SP_DIR_TX) {
 		AUDIO_SP_TXCHNSrcSel(obj->i2s_idx, TXCHN2, TX_FIFO0_REG0_L);
 		AUDIO_SP_TXCHNSrcSel(obj->i2s_idx, TXCHN3, TX_FIFO0_REG0_R);
+
+#if defined(I2S_EQ)	/* to use HW EQ need to initialize other I2S */
+dbg("i2s_set_eq_param\n");
+		i2s_set_eq_param(I2S_NUM_0, channel_num, rate, word_len);
+		i2s_set_eq_param(I2S_NUM_1, channel_num, rate, word_len);
+		i2s_set_loopback();
+#endif
 	} else {
 		AUDIO_SP_RXFIFOSrcSel(obj->i2s_idx, RX_FIFO0_REG0_L, RXCHN6);
 		AUDIO_SP_RXFIFOSrcSel(obj->i2s_idx, RX_FIFO0_REG0_R, RXCHN7);
@@ -474,6 +583,12 @@ void i2s_init(i2s_t *obj, PinName sck, PinName ws, PinName sd_tx, PinName sd_rx,
 
 		/*Enable SPORT/AUDIO CODEC CLOCK and Function*/
 		RCC_PeriphClockCmd(APBPeriph_SPORT2, APBPeriph_SPORT2_CLOCK, ENABLE);
+#if defined(I2S_EQ)
+		RCC_PeriphClockCmd(APBPeriph_SPORT0, APBPeriph_SPORT0_CLOCK, ENABLE);
+		RCC_PeriphClockCmd(APBPeriph_SPORT1, APBPeriph_SPORT1_CLOCK, ENABLE);
+		RCC_PeriphClockCmd(APBPeriph_AC, APBPeriph_AC_CLOCK, ENABLE);
+		RCC_PeriphClockCmd(APBPeriph_AUDIO, NULL, ENABLE);
+#endif
 	} else {
 		pin_func = PINMUX_FUNCTION_I2S3;
 
@@ -488,8 +603,6 @@ void i2s_init(i2s_t *obj, PinName sck, PinName ws, PinName sd_tx, PinName sd_rx,
 	Pinmux_Config(sd_rx, pin_func);
 
 	i2s_set_param(obj, obj->channel_num, obj->sampling_rate, obj->word_length);
-
-
 }
 
 /**
@@ -503,14 +616,23 @@ void i2s_deinit(i2s_t *obj)
 	case PLL_CLOCK_24P576M:
 		PLL_I2S_24P576M(DISABLE);
 		break;
-
+	case PLL_CLOCK_45P1584M:
+		PLL_I2S_45P158M(DISABLE);
+		break;
 	case PLL_CLOCK_98P304M:
+	default:
 		PLL_I2S_98P304M(DISABLE);
 		break;
 	}
 
 	if (obj->i2s_idx == I2S2) {
 		RCC_PeriphClockCmd(APBPeriph_SPORT2, APBPeriph_SPORT2_CLOCK, DISABLE);
+#if defined(I2S_EQ)
+		RCC_PeriphClockCmd(APBPeriph_SPORT0, APBPeriph_SPORT0_CLOCK, DISABLE);
+		RCC_PeriphClockCmd(APBPeriph_SPORT1, APBPeriph_SPORT1_CLOCK, DISABLE);
+		RCC_PeriphClockCmd(APBPeriph_AC, APBPeriph_AC_CLOCK, DISABLE);
+		RCC_PeriphClockCmd(APBPeriph_AUDIO, NULL, DISABLE);
+#endif
 	} else {
 		RCC_PeriphClockCmd(APBPeriph_SPORT3, APBPeriph_SPORT3_CLOCK, DISABLE);
 	}
@@ -581,8 +703,19 @@ void i2s_recv_page(i2s_t *obj)
   */
 void i2s_enable(i2s_t *obj)
 {
+#if defined(I2S_EQ)
+	if (obj->i2s_idx == I2S_NUM_2) {
+		AUDIO_SP_DmaCmd(I2S_NUM_0, ENABLE);
+		AUDIO_SP_DmaCmd(I2S_NUM_1, ENABLE);
+	}
+#endif
 	AUDIO_SP_DmaCmd(obj->i2s_idx, ENABLE);
+
 	if (obj->direction == I2S_DIR_TX) {
+#if defined(I2S_EQ)
+		AUDIO_SP_TXStart(I2S_NUM_0, ENABLE);
+		AUDIO_SP_RXStart(I2S_NUM_1, ENABLE);
+#endif
 		AUDIO_SP_TXStart(obj->i2s_idx, ENABLE);
 	} else {
 		AUDIO_SP_RXStart(obj->i2s_idx, ENABLE);
@@ -605,10 +738,22 @@ void i2s_disable(i2s_t *obj, bool is_suspend)
 		 * GDMA_ChnlFree(SPGdmaStruct->SpTxGdmaInitStruct.GDMA_Index, SPGdmaStruct->SpTxGdmaInitStruct.GDMA_ChNum);
 		 */
 
+#if defined(I2S_EQ)
+		AUDIO_SP_DmaCmd(I2S_NUM_0, DISABLE);
+		AUDIO_SP_DmaCmd(I2S_NUM_1, DISABLE);
+
+		AUDIO_SP_TXStart(I2S_NUM_0, DISABLE);
+		AUDIO_SP_RXStart(I2S_NUM_1, DISABLE);
+#endif
 		AUDIO_SP_DmaCmd(obj->i2s_idx, DISABLE);
 		AUDIO_SP_TXStart(obj->i2s_idx, DISABLE);
+
 		if (is_suspend) {
 			GDMA_ChnlFree(l_SPGdmaStruct->SpTxGdmaInitStruct.GDMA_Index, l_SPGdmaStruct->SpTxGdmaInitStruct.GDMA_ChNum);
+#if defined(I2S_EQ)
+			AUDIO_SP_Deinit(I2S_NUM_0, SP_DIR_TX);
+			AUDIO_SP_Deinit(I2S_NUM_1, SP_DIR_RX);
+#endif
 			AUDIO_SP_Deinit(obj->i2s_idx, obj->direction);
 		}
 	} else {
