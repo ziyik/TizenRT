@@ -28,6 +28,12 @@
 #include <ble_manager/ble_manager.h>
 #include <semaphore.h>
 #include <errno.h>
+#ifdef CONFIG_PM
+#include <tinyara/pm/pm.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <errno.h>
+#endif
 
 #define RMC_TAG "\x1b[33m[RMC]\x1b[0m"
 #define RMC_CLIENT_TAG "\x1b[32m[RMC CLIENT]\x1b[0m"
@@ -392,6 +398,7 @@ static void set_scan_filter(ble_scan_filter *filter, uint8_t *raw_data, uint8_t 
 int ble_rmc_main(int argc, char *argv[])
 {
 	RMC_LOG(RMC_TAG, "- BLE Remote Test -\n");
+	int pm_fd = 0;
 
 	ble_result_e ret = BLE_MANAGER_FAIL;
 
@@ -448,6 +455,22 @@ int ble_rmc_main(int argc, char *argv[])
 	if (strncmp(argv[1], "deinit", 7) == 0) {
 		ret = ble_manager_deinit();
 		RMC_LOG(RMC_CLIENT_TAG, "deinit done[%d]\n", ret);
+	}
+
+	if (strncmp(argv[1], "wake", 5) == 0) {
+		pm_fd = open("/dev/pm", O_WRONLY);
+		if (ioctl(pm_fd, PMIOC_SUSPEND, 0) != OK) {
+			dbg("pm_resume failed(%d)\n", get_errno());
+		}
+		close(pm_fd);
+	}
+
+	if (strncmp(argv[1], "sleep", 6) == 0) {
+		pm_fd = open("/dev/pm", O_WRONLY);
+		if (ioctl(pm_fd, PMIOC_RESUME, 0) != OK) {
+			dbg("pm_resume failed(%d)\n", get_errno());
+		}
+		close(pm_fd);
 	}
 
 	if (strncmp(argv[1], "reconn", 7) == 0) {

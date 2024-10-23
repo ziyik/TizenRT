@@ -559,10 +559,11 @@ static void rtl8730e_log_up_shutdown(struct uart_dev_s *dev)
  *   interrupts are not enabled until the txint() and rxint() methods are called.
  *
  ****************************************************************************/
-
+int log_rxirq_count = 0;
 static int rtl8730e_log_uart_irq(void *Data)
 {
 	uart_recvchars(&CONSOLE_DEV);
+log_rxirq_count++;
 	return 0;
 }
 
@@ -680,7 +681,7 @@ static int rtl8730e_log_up_ioctl(FAR struct uart_dev_s *dev, int cmd, unsigned l
  *   receipt are provided in the return 'status'.
  *
  ****************************************************************************/
-
+int log_rx_count = 0;
 static int rtl8730e_log_up_receive(struct uart_dev_s *dev, unsigned int *status)
 {
 	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
@@ -689,7 +690,7 @@ static int rtl8730e_log_up_receive(struct uart_dev_s *dev, unsigned int *status)
 	DEBUGASSERT(priv);
 	rxd = up_lowgetc();
 	*status = rxd;
-
+log_rx_count++;
 	return rxd & 0xff;
 }
 
@@ -700,11 +701,13 @@ static int rtl8730e_log_up_receive(struct uart_dev_s *dev, unsigned int *status)
  *   Call to enable or disable RX interrupts
  *
  ****************************************************************************/
+int log_rxinit_count = 0;
 static void rtl8730e_log_up_rxint(struct uart_dev_s *dev, bool enable)
 {
 	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
 	DEBUGASSERT(priv);
 	priv->rxint_enable = enable;
+log_rxinit_count++;
 	//if (enable)
 		//LOGUART_RxCmd(LOGUART_DEV, ENABLE);
 	//else
@@ -718,11 +721,12 @@ static void rtl8730e_log_up_rxint(struct uart_dev_s *dev, bool enable)
  *   Return true if the receive fifo is not empty
  *
  ****************************************************************************/
-
+int log_rxavai_count = 0;
 static bool rtl8730e_log_up_rxavailable(struct uart_dev_s *dev)
 {
 	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
 	DEBUGASSERT(priv);
+log_rxavai_count++;
 	return (LOGUART_Readable());
 }
 
@@ -756,6 +760,13 @@ static void rtl8730e_log_up_txint(struct uart_dev_s *dev, bool enable)
 	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
 	DEBUGASSERT(priv);
 	priv->txint_enable = enable;
+
+#ifdef CONFIG_PM
+	if (uart_active_state != enable) {	/* State has changed */
+		bsp_pm_domain_control(BSP_UART_DRV, enable);
+		uart_active_state = enable;
+	}
+#endif
 
 	if (enable)
 		uart_xmitchars(dev);
@@ -890,7 +901,7 @@ static void rtl8730e_up_shutdown(struct uart_dev_s *dev)
  *   interrupts are not enabled until the txint() and rxint() methods are called.
  *
  ****************************************************************************/
-
+int rxirq_count = 0;
 void rtl8730e_uart_irq(uint32_t id, SerialIrq event)
 {
 	struct uart_dev_s *dev = (struct uart_dev_s *)id;
@@ -898,6 +909,7 @@ void rtl8730e_uart_irq(uint32_t id, SerialIrq event)
 
 	if (event == RxIrq) {
 		uart_recvchars(dev);
+		rxirq_count++;
 	}
 	if (event == TxIrq) {
 		priv->tx_level = TX_FIFO_MAX;
@@ -1027,7 +1039,7 @@ static int rtl8730e_up_ioctl(FAR struct uart_dev_s *dev, int cmd, unsigned long 
  *   receipt are provided in the return 'status'.
  *
  ****************************************************************************/
-
+int rx_count = 0;
 static int rtl8730e_up_receive(struct uart_dev_s *dev, unsigned int*status)
 {
 	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
@@ -1036,7 +1048,7 @@ static int rtl8730e_up_receive(struct uart_dev_s *dev, unsigned int*status)
 	DEBUGASSERT(priv);
 	rxd = serial_getc(sdrv[uart_index_get(priv->tx)]);
 	*status = rxd;
-
+rx_count++;
 	return rxd & 0xff;
 }
 
@@ -1047,11 +1059,13 @@ static int rtl8730e_up_receive(struct uart_dev_s *dev, unsigned int*status)
  *   Call to enable or disable RX interrupts
  *
  ****************************************************************************/
+int rxinit_count = 0;
 static void rtl8730e_up_rxint(struct uart_dev_s *dev, bool enable)
 {
 	struct rtl8730e_up_dev_s *priv = (struct rtl8730e_up_dev_s *)dev->priv;
 	DEBUGASSERT(priv);
 	priv->rxint_enable = enable;
+rxinit_count++;
 	serial_irq_set(sdrv[uart_index_get(priv->tx)], RxIrq, enable);	// 1= ENABLE
 }
 
@@ -1150,12 +1164,29 @@ static bool rtl8730e_up_txempty(struct uart_dev_s *dev)
  *   Suspend or resume serial peripherals for/from sleep modes.
  *
  ****************************************************************************/
-
+extern uint16_t log_nbytes;
 #ifdef CONFIG_PM
 static uint32_t rtk_loguart_suspend(uint32_t expected_idle_time, void *param)
 {
 	(void)expected_idle_time;
 	(void)param;
+
+printf("\n\rlog_rx_count %d\n", log_rx_count);
+printf("\n\rlog_rxinit_count %d\n", log_rxinit_count);
+printf("\n\rlog_rxirq_count %d\n", log_rxirq_count);
+printf("\n\rlog_rxavai_count %d\n", log_rxavai_count);
+log_rxavai_count = 0;
+log_rx_count = 0;
+log_rxinit_count = 0;
+log_rxirq_count = 0;
+printf("\n\rrx_count %d\n", rx_count);
+printf("\n\rrxinit_count %d\n", rxinit_count);
+printf("\n\rrxirq_count %d\n", rxirq_count);
+rx_count = 0;
+rxinit_count = 0;
+rxirq_count = 0;
+printf("\n\rlog_nbytes %d\n", log_nbytes);
+log_nbytes = 0;
 
 	LOGUART_Suspend();
 	/* Pre process is done in LP core */

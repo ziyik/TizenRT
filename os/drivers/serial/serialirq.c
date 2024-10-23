@@ -158,7 +158,7 @@ void uart_xmitchars(FAR uart_dev_t *dev)
  *   take characters from the tail of the buffer.
  *
  ************************************************************************************/
-
+uint16_t log_nbytes;
 void uart_recvchars(FAR uart_dev_t *dev)
 {
 	FAR struct uart_buffer_s *rxbuf = &dev->recv;
@@ -254,7 +254,7 @@ void uart_recvchars(FAR uart_dev_t *dev)
 	/* If any bytes were added to the buffer, inform any waiters there there is new
 	 * incoming data available.
 	 */
-
+log_nbytes = nbytes;
 	if (nbytes) {
 		dev->received(dev);
 	}
