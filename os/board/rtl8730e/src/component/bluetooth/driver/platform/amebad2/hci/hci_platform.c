@@ -11,6 +11,7 @@
 #include "hci_platform.h"
 #include "hci_dbg.h"
 #include "dlist.h"
+#include "wifi_conf.h"
 
 #ifdef CONFIG_RTK_DATA_BINARY_TO_EXT_FLASH
 #include <tinyara/fs/ioctl.h>
@@ -50,7 +51,8 @@
 			  ((uint32_t)(*(a + 3)) << 24);  \
 	}
 
-uint32_t hci_cfg_sw_val = 0xFF;    // Open BT Trace log & FW log use 0xDD
+uint32_t hci_cfg_sw_val = 0xDD;    // Open BT Trace log & FW log use 0xDD
+uint8_t hci_mp_flag = 0;
 uint8_t bt_ant_switch = ANT_S1;      // Select BT RF Patch
 
 #ifndef CONFIG_RTK_DATA_BINARY_TO_EXT_FLASH 
@@ -70,7 +72,7 @@ static uint8_t hci_phy_efuse[HCI_PHY_EFUSE_LEN]  = {0};
 static uint8_t hci_lgc_efuse[HCI_LGC_EFUSE_LEN]  = {0};
 static uint8_t hci_chipid_in_fw  = 0;
 static uint8_t hci_key_id = 0;
-unsigned char rtlbt_config_s0[] = {
+unsigned char hci_init_config_s0[] = {
 	/* Header */
 	0x55, 0xAB, 0x23, 0x87,
 
@@ -79,7 +81,7 @@ unsigned char rtlbt_config_s0[] = {
 
 	/* BT MAC address */
 	0x30, 0x00, 0x06, 0x8A, 0xD5, 0x23, 0x4C, 0xE0, 0x00,
-	
+
 	/* LOG Uart Baudrate 115200 */
 	0x08, 0x00, 0x04, 0x00, 0xC2, 0x01, 0x00,
 
@@ -87,8 +89,8 @@ unsigned char rtlbt_config_s0[] = {
 	0x0C, 0x00, 0x04, 0x01, 0x80, 0x92, 0x04,
 
 	/* Uart Flow Control */
-	0x18, 0x00, 0x01, 0x5C, 
-	
+	0x18, 0x00, 0x01, 0x5C,
+
 	/* BT Wake Host */
 	0x42, 0x00, 0x01, 0x09,
 
@@ -105,9 +107,9 @@ unsigned char rtlbt_config_s0[] = {
 	/* RF: iqm_max_txgain_LE1M_2402(1), iqm_max_txgain_LE1M_2480(1), iqm_max_txgain_LE2M_2402(1), iqm_max_txgain_LE2M_2480(1)*/
 	0x8A, 0x02, 0x04, 0x70, 0x70, 0x70, 0x70
 };
-unsigned int rtlbt_config_len_s0 = sizeof(rtlbt_config_s0);
+unsigned int hci_init_config_len_s0 = sizeof(hci_init_config_s0);
 
-unsigned char rtlbt_config_s1[] =
+unsigned char hci_init_config_s1[] =
 {
 	/* Header */
 	0x55, 0xAB, 0x23, 0x87,
@@ -117,7 +119,7 @@ unsigned char rtlbt_config_s1[] =
 
 	/* BT MAC address */
 	0x30, 0x00, 0x06, 0x8A, 0xD5, 0x23, 0x4C, 0xE0, 0x00,
-	
+
 	/* LOG Uart Baudrate 115200 */
 	0x08, 0x00, 0x04, 0x00, 0xC2, 0x01, 0x00,
 
@@ -125,8 +127,8 @@ unsigned char rtlbt_config_s1[] =
 	0x0C, 0x00, 0x04, 0x01, 0x80, 0x92, 0x04,
 
 	/* Uart Flow Control */
-	0x18, 0x00, 0x01, 0x5C, 
-	
+	0x18, 0x00, 0x01, 0x5C,
+
 	/* BT Wake Host */
 	0x42, 0x00, 0x01, 0x09,
 
@@ -134,7 +136,7 @@ unsigned char rtlbt_config_s1[] =
 	0x43, 0x00, 0x01, 0x07,
 
 	/* RF: phy_flow_ctrl_para(1), iqm_txgaink_module(1), iqm_txgain_flatk_module(4), iqm_txgain_10dBm_raw_index(1), lbt_ant_gain(1) */
-	0x78, 0x02, 0x08, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x51, 0x00,
+	0x78, 0x02, 0x08, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x52, 0x00,
 
 	/* RF: iqm_max_txgain_1M(1), iqm_max_txgain_2M(1), iqm_max_txgain_3M(1), iqm_max_txgain_LE1M(1), iqm_max_txgain_LE2M(1), iqm_max_txgain_LE1M_adv(1), iqm_max_txgain_LE2M_adv(1), iqm_max_txgain_LR(1)*/
 	/* S1(9dBm): */
@@ -143,10 +145,10 @@ unsigned char rtlbt_config_s1[] =
 	/* RF: iqm_max_txgain_LE1M_2402(1), iqm_max_txgain_LE1M_2480(1), iqm_max_txgain_LE2M_2402(1), iqm_max_txgain_LE2M_2480(1)*/
 	0x8A, 0x02, 0x04, 0x70, 0x70, 0x70, 0x70
 };
-unsigned int rtlbt_config_len_s1 = sizeof(rtlbt_config_s1);
+unsigned int hci_init_config_len_s1 = sizeof(hci_init_config_s1);
 
-unsigned char *rtlbt_config = NULL;
-unsigned int rtlbt_config_len = 0;
+unsigned char *hci_init_config = NULL;
+unsigned int hci_init_config_len = 0;
 
 typedef struct {
 	struct list_head list;
@@ -210,39 +212,36 @@ void hci_platform_set_antenna(uint8_t ant)
 	bt_ant_switch = ant;
 }
 
-void hci_platform_bt_log_init(void)
+void hci_platform_bt_fw_log_open(void)
 {
 	LOGUART_Relay_InitTypeDef LOGUART_Relay_InitStruct;
+
+	LOGUART_AGGCmd(LOGUART_DEV, ENABLE);
+	LOGUART_AGGPathCmd(LOGUART_DEV, LOGUART_PATH_INDEX_5, ENABLE);
+
 	LOGUART_Relay_StructInit(&LOGUART_Relay_InitStruct);
 	LOGUART_Relay_ClearRxFifo(LOGUART_DEV);
 	LOGUART_Relay_SetFormat(LOGUART_DEV, &LOGUART_Relay_InitStruct);
 	LOGUART_Relay_SetBaud(LOGUART_DEV, 115200);
 	LOGUART_Relay_RxCmd(LOGUART_DEV, ENABLE);
-	LOGUART_AGGCmd(LOGUART_DEV, ENABLE);  /* No need on testchip, because AGG is default enable */
-}
-
-void hci_platform_bt_log_deinit(void)
-{
-	LOGUART_Relay_RxCmd(LOGUART_DEV, DISABLE);
-}
-
-void hci_platform_bt_fw_log_open(void)
-{
-	LOGUART_AGGPathCmd(LOGUART_DEV, LOGUART_PATH_INDEX_5, ENABLE);
 }
 
 void hci_platform_bt_fw_log_close(void)
 {
+	LOGUART_Relay_RxCmd(LOGUART_DEV, DISABLE);
+	LOGUART_WaitTxComplete();
 	LOGUART_AGGPathCmd(LOGUART_DEV, LOGUART_PATH_INDEX_5, DISABLE);
 }
 
 void hci_platform_bt_trace_log_open(void)
 {
+	LOGUART_AGGCmd(LOGUART_DEV, ENABLE);
 	LOGUART_AGGPathCmd(LOGUART_DEV, LOGUART_PATH_INDEX_3, ENABLE);
 }
 
 void hci_platform_bt_trace_log_close(void)
 {
+	LOGUART_WaitTxComplete();
 	LOGUART_AGGPathCmd(LOGUART_DEV, LOGUART_PATH_INDEX_3, DISABLE);
 }
 
@@ -338,16 +337,18 @@ bool hci_platform_check_lmp_subver(uint16_t lmp_subver)
 		return false;
 }
 
+void hci_platform_set_mp(uint8_t flag)
+{
+	hci_mp_flag = flag;
+}
+
 uint8_t hci_platform_check_mp(void)
 {
-#if defined(CONFIG_WLAN) && CONFIG_WLAN
-	if (wifi_driver_is_mp())
+	if (hci_mp_flag) {
 		return HCI_SUCCESS;
-	else
+	} else {
 		return HCI_FAIL;
-#else
-	return HCI_FAIL;
-#endif
+	}
 }
 
 static uint8_t hci_platform_read_efuse(void)
@@ -422,26 +423,26 @@ static uint8_t hci_platform_parse_config(void)
 	uint16_t entry_offset, entry_len;
 
 	if (bt_ant_switch == ANT_S0) {
-		rtlbt_config = rtlbt_config_s0;
-		rtlbt_config_len = rtlbt_config_len_s0;
+		hci_init_config = hci_init_config_s0;
+		hci_init_config_len = hci_init_config_len_s0;
 	} else {
-		rtlbt_config = rtlbt_config_s1;
-		rtlbt_config_len = rtlbt_config_len_s1;
+		hci_init_config = hci_init_config_s1;
+		hci_init_config_len = hci_init_config_len_s1;
 	}
 
-	if (rtlbt_config_len <= HCI_CONFIG_HDR_LEN) {
+	if (hci_init_config_len <= HCI_CONFIG_HDR_LEN) {
 		return HCI_IGNORE;
 	}
 
-	p = rtlbt_config;
+	p = hci_init_config;
 	if (HCI_CONFIG_SIGNATURE != *(uint32_t *)(p)) {
 		return HCI_FAIL;
 	}
 
-	 *(uint16_t *)(p + 4) = (uint16_t)(rtlbt_config_len - HCI_CONFIG_HDR_LEN);
+	*(uint16_t *)(p + 4) = (uint16_t)(hci_init_config_len - HCI_CONFIG_HDR_LEN);
 
 	p += HCI_CONFIG_HDR_LEN;
-	while (p < rtlbt_config + rtlbt_config_len) {
+	while (p < hci_init_config + hci_init_config_len) {
 		entry_offset = *(uint16_t *)(p);
 		entry_len = *(uint8_t *)(p + 2);
 		p += 3;
@@ -450,14 +451,12 @@ static uint8_t hci_platform_parse_config(void)
 		case 0x000c:
 			hci_platform_convert_baudrate((uint32_t *)p, &hci_cfg_work_uart_baudrate, 1);
 			hci_platform_convert_baudrate((uint32_t *)hci_cfg_work_bt_baudrate, &hci_cfg_work_uart_baudrate, 0);
-			/* TODO: Config BaudRate */
 			break;
 		case 0x0018:
 			/* MP Mode, Close Flow Control */
 			if (hci_platform_check_mp() == HCI_SUCCESS) {
 				p[0] = p[0] & (~BIT2);
 			}
-			/* TODO: Config Flow Control */
 			break;
 		case 0x0030:
 			/* Set ConfigBuf MacAddr, Use Customer Assign or Efuse */
@@ -540,56 +539,62 @@ static uint8_t hci_platform_parse_config(void)
 
 static void bt_power_on(void)
 {
-	set_reg_value(0x42008200, BIT9, 1);  		//enable power cut of BTON
+	set_reg_value(0x42008200, BIT9, 1);					//enable power cut of BTON
 	osif_delay(5);
-	set_reg_value(0x42008204, BIT9, 0);  		//disable ISO of BTON
+	set_reg_value(0x42008204, BIT9, 0);					//disable ISO of BTON
 	osif_delay(5);
 	set_reg_value(0x42008250, BIT21 | BIT22, 3);
 	osif_delay(5);
-	set_reg_value(0x42008250, BIT1 | BIT2, 3);  // enable BT AFE & BT S0 RF, BT S1 also enable S0 RF
+	set_reg_value(0x42008250, BIT1 | BIT2, 3);			//enable BT AFE & BT S0 RF, BT S1 also enable S0 RF
 	osif_delay(5);
 	if (bt_ant_switch == ANT_S0) {
-		set_reg_value(0x42008250, BIT0, 0);  		//BT use BT RFAFE
+		set_reg_value(0x42008250, BIT0, 0);				//BT use BT RFAFE
 		osif_delay(5);
 	} else {
-		set_reg_value(0x42008250, BIT0, 1);  		//BT use WL RFAFE
+		set_reg_value(0x42008250, BIT0, 1);				//BT use WL RFAFE
 		osif_delay(5);
-		set_reg_value(0x42008208, BIT24, 1); 		//enable WL RFAFE control circuit
+		set_reg_value(0x42008208, BIT24, 1);			//enable WL RFAFE control circuit
 		osif_delay(5);
-		set_reg_value(0x42008940, BIT5 | BIT6, 3);  //enable WL RFAFE
+		set_reg_value(0x42008940, BIT5 | BIT6, 3);		//enable WL RFAFE
 		osif_delay(5);
 	}
-	set_reg_value(0x42008200, BIT25, 1);  //Release BTON por,BT Memory
+	set_reg_value(0x42008200, BIT25, 1);				//Release BTON por,BT Memory
 	osif_delay(5);
-	set_reg_value(0x42008208, BIT13, 1);  //Release BTON reset
+	set_reg_value(0x42008208, BIT13, 1);				//Release BTON reset
 	osif_delay(5);
+	if (HCI_BT_KEEP_WAKE) {
+		set_reg_value(0x42008250, BIT14, 1);			//enable HOST_WAKE_BT No GPIO
+		osif_delay(5);
+		set_reg_value(0x42008250, BIT13, 1);			//HOST_WAKE_BT
+		osif_delay(5);
+	}
 }
 
 void bt_power_off(void)
 {
-	set_reg_value(0x42008208, BIT13, 0);  		//BTON reset
+	set_reg_value(0x42008208, BIT13, 0);				//BTON reset
 	osif_delay(5);
-	set_reg_value(0x42008200, BIT25, 0);  		//release BTON por, BT memory
+	set_reg_value(0x42008200, BIT25, 0);				//release BTON por, BT memory
 	osif_delay(5);
 	if (bt_ant_switch == ANT_S0) {
-		set_reg_value(0x42008250, BIT1 | BIT2, 0);  //disable BT AFE & BT S0 RF
+		set_reg_value(0x42008250, BIT1 | BIT2, 0);		//disable BT AFE & BT S0 RF
 		osif_delay(5);
 	} else {
 #if defined(CONFIG_WLAN) && CONFIG_WLAN
 		if (!(wifi_is_running(WLAN0_IDX) || wifi_is_running(WLAN1_IDX)))
 #endif
 		{
-			set_reg_value(0x42008940, BIT5 | BIT6, 0);  //disable RFAFE (if WIFI active, keep 2'b11)
+			set_reg_value(0x42008940, BIT5 | BIT6, 0);	//disable RFAFE (if WIFI active, keep 2'b11)
 			osif_delay(5);
-			set_reg_value(0x42008208, BIT24, 0);  //disable WL RFAFE control circuit (if WIFI active, keep 1'b1)
+			set_reg_value(0x42008208, BIT24, 0);		//disable WL RFAFE control circuit (if WIFI active, keep 1'b1)
 			osif_delay(5);
 		}
-		set_reg_value(0x42008250, BIT1 | BIT2, 0);  //disable BT AFE & BT S0 RF
+		set_reg_value(0x42008250, BIT1 | BIT2, 0);		//disable BT AFE & BT S0 RF
 		osif_delay(5);
 	}
-	set_reg_value(0x42008204, BIT9, 1);  		//enable ISO of BTON
+	set_reg_value(0x42008204, BIT9, 1);					//enable ISO of BTON
 	osif_delay(5);
-	set_reg_value(0x42008200, BIT9, 0);  		//disable power cut of BTON
+	set_reg_value(0x42008200, BIT9, 0);					//disable power cut of BTON
 	osif_delay(5);
 }
 
@@ -597,11 +602,6 @@ void hci_platform_controller_reset(void)
 {
 	/* BT Controller Power */
 	bt_power_on();
-	osif_delay(5);
-
-	/* GNT_BT */
-	// set_reg_value(0x40000764, BIT9 | BIT10 | BIT11 | BIT12, 15);
-	// osif_delay(5);
 
 	HCI_DBG("BT Reset OK!");
 }
@@ -610,6 +610,22 @@ bool rtk_bt_pre_enable(void)
 {
 #ifndef CONFIG_PLATFORM_TIZENRT_OS
 	uint32_t lock_status;
+
+#if defined(CONFIG_WLAN) && CONFIG_WLAN
+		if (bt_ant_switch == ANT_S1) {
+			if (!(wifi_is_running(WLAN0_IDX) || wifi_is_running(WLAN1_IDX))) {
+				HCI_ERR("WiFi is OFF! Please Restart BT after Wifi on!");
+				return false;
+			}
+
+#if (!defined(CONFIG_MP_INCLUDED) || !CONFIG_MP_INCLUDED) || (!defined(CONFIG_MP_SHRINK) || !CONFIG_MP_SHRINK)
+			if (!hci_platform_check_mp()) {
+				wifi_set_lps_enable(FALSE);
+				wifi_set_ips_internal(FALSE);
+			}
+#endif
+		}
+#endif
 
 	lock_status = pmu_get_wakelock_status();
 	if (!(lock_status & ((0x01) << PMU_BT_DEVICE))) {
@@ -631,11 +647,17 @@ bool rtk_bt_post_enable(void)
 		pmu_release_wakelock(PMU_BT_DEVICE);
 	}
 #endif
-	return true;
-}
 
-bool rtk_bt_post_disable(void)
-{
+#if defined(CONFIG_WLAN) && CONFIG_WLAN
+		if (bt_ant_switch == ANT_S1) {
+#if (!defined(CONFIG_MP_INCLUDED) || !CONFIG_MP_INCLUDED) || (!defined(CONFIG_MP_SHRINK) || !CONFIG_MP_SHRINK)
+			if (!hci_platform_check_mp()) {
+				wifi_set_lps_enable(TRUE);
+				wifi_set_ips_internal(TRUE);
+			}
+#endif
+		}
+#endif
 	return true;
 }
 
@@ -657,9 +679,6 @@ uint8_t hci_platform_init(void)
 	}
 
 	if (!CHECK_CFG_SW(CFG_SW_BT_FW_LOG)) {
-		if (CHECK_CFG_SW(CFG_SW_BT_TRACE_LOG)) {
-			hci_platform_bt_log_init();
-		}
 		hci_platform_bt_fw_log_open();
 		HCI_INFO("FW LOG OPEN");
 #if 0
@@ -693,20 +712,21 @@ uint8_t hci_platform_deinit(void)
 
 	if (!CHECK_CFG_SW(CFG_SW_BT_FW_LOG)) {
 		hci_platform_bt_fw_log_close();
-		if (CHECK_CFG_SW(CFG_SW_BT_TRACE_LOG)) {
-			hci_platform_bt_log_deinit();
-		}
 	}
-
-	/* PowerSaving */
-	rtk_bt_post_disable();
 
 	return HCI_SUCCESS;
 }
 
 void hci_platform_record_chipid(uint8_t chipid)
 {
-	hci_chipid_in_fw = chipid;
+	uint8_t buf = hci_platform_get_rom_ver();
+	printf("[######## %s : %d]buf[3] %d\n", __FUNCTION__, __LINE__, buf);
+
+	if (chipid == 2 && hci_platform_get_rom_ver() >= 3) {
+		hci_chipid_in_fw = 3;
+	} else {
+		hci_chipid_in_fw = chipid;
+	}
 }
 
 void hci_platform_get_baudrate(uint8_t *baudrate, uint8_t len, uint8_t init_or_work)
@@ -1070,8 +1090,8 @@ static uint8_t hci_platform_get_patch_info(void)
 
 	patch_info->fw_len = fw_len;
 
-	patch_info->config_buf = rtlbt_config;
-	patch_info->config_len = rtlbt_config_len;
+	patch_info->config_buf = hci_init_config;
+	patch_info->config_len = hci_init_config_len;
 
 	/* Calculate patch info */
 	patch_info->end_index = (patch_info->fw_len + patch_info->config_len - 1) / HCI_PATCH_FRAG_SIZE;

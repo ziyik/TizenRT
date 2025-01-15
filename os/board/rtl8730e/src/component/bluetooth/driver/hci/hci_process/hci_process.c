@@ -13,16 +13,16 @@
 
 
 #define USE_HCI_H4 1
-#ifdef USE_HCI_H4
+#if defined(USE_HCI_H4) && USE_HCI_H4
     #define RESERVE_LEN 1
-#elif USE_HCI_H5
+#elif defined(USE_HCI_H5) && USE_HCI_H5
     #define RESERVE_LEN 4
 #else
     #define RESERVE_LEN 0
 #endif
 
 
-#ifdef hci_platform_START_RF_CALIBRATION
+#if defined(hci_platform_START_RF_CALIBRATION) && hci_platform_START_RF_CALIBRATION
 static uint8_t hci_process_start_rf_calibration(uint16_t opcode)
 {
     (void)opcode;
@@ -33,7 +33,7 @@ static uint8_t hci_process_start_rf_calibration(uint16_t opcode)
 }
 #endif
 
-#ifdef hci_platform_START_IQK
+#if defined(hci_platform_START_IQK) && hci_platform_START_IQK
 static uint8_t hci_process_start_iqk(uint16_t opcode)
 {
     /* OpCode: 0xFD4A, Data Len: Cmd(7), Event(6) */
@@ -141,9 +141,10 @@ static uint8_t hci_process_update_baudrate(uint16_t opcode)
     return HCI_SUCCESS;
 }
 
-#ifdef hci_platform_MP_RESET_BAUDRATE
+#if defined(hci_platform_MP_RESET_BAUDRATE) && hci_platform_MP_RESET_BAUDRATE
 static uint8_t hci_process_reset_baudrate(uint16_t opcode)
 {
+#if defined(CONFIG_MP_INCLUDED) && CONFIG_MP_INCLUDED
     /* OpCode: 0xFC17, Data Len: Cmd(7), Event(6) */
     uint8_t buf_raw[RESERVE_LEN+7];
     uint8_t* buf = buf_raw+RESERVE_LEN;
@@ -170,10 +171,14 @@ static uint8_t hci_process_reset_baudrate(uint16_t opcode)
     } else {
         return HCI_IGNORE;
     }
+#else
+    (void)opcode;
+    return HCI_IGNORE;
+#endif
 }
 #endif
 
-#ifdef hci_platform_DOWNLOAD_PATCH
+#if defined(hci_platform_DOWNLOAD_PATCH) && hci_platform_DOWNLOAD_PATCH
 static uint8_t hci_process_download_patch(uint16_t opcode)
 {
     /* OpCode: 0xFC20, Data Len: Cmd(256), Event(7) */
@@ -217,7 +222,7 @@ dl_patch_done:
 }
 #endif
 
-#ifdef hci_platform_START_RX_DCK
+#if defined(hci_platform_START_RX_DCK) && hci_platform_START_RX_DCK
 static uint8_t hci_process_start_rx_dck(uint16_t opcode)
 {
     (void)opcode;
@@ -228,7 +233,7 @@ static uint8_t hci_process_start_rx_dck(uint16_t opcode)
 }
 #endif
 
-#ifdef hci_platform_WRITE_PHY_EFUSE
+#if defined(hci_platform_WRITE_PHY_EFUSE) && hci_platform_WRITE_PHY_EFUSE
 static uint8_t hci_process_write_phy_efuse(uint16_t opcode)
 {
     /* OpCode: 0xFD91, Data Len: Cmd(HCI_WRITE_PHY_EFUSE_LEN+3), Event(6) */
@@ -252,7 +257,7 @@ static uint8_t hci_process_write_phy_efuse(uint16_t opcode)
 }
 #endif
 
-#ifdef hci_platform_WRITE_RX_ADCK
+#if defined(hci_platform_WRITE_RX_ADCK) && hci_platform_WRITE_RX_ADCK
 static uint8_t hci_process_write_rx_adck(uint16_t opcode)
 {
     /* OpCode: 0xFD20, Data Len: Cmd(4), Event(6) */
@@ -295,7 +300,7 @@ static uint8_t hci_process_write_rx_adck(uint16_t opcode)
 }
 #endif
 
-#ifdef hci_platform_SET_CUT_VER
+#if defined(hci_platform_SET_CUT_VER) && hci_platform_SET_CUT_VER
 static uint8_t hci_process_set_cut_ver(uint16_t opcode)
 {
     /* OpCode: 0xFDAC, Data Len: Cmd(4), Event(6) */
@@ -306,6 +311,8 @@ static uint8_t hci_process_set_cut_ver(uint16_t opcode)
     buf[1] = (uint8_t)(opcode >> 8);
     buf[2] = (uint8_t)(1);
     buf[3] = hci_platform_get_rom_ver();
+
+    printf("[######## %s : %d]buf[3] %d\n", __FUNCTION__, __LINE__, buf[3]);
 
     if (buf[3] == 4) {
         buf[3] = 3;
@@ -322,7 +329,7 @@ static uint8_t hci_process_set_cut_ver(uint16_t opcode)
 }
 #endif
 
-#ifdef CONFIG_HCI_RESET
+#if defined(CONFIG_HCI_RESET) && CONFIG_HCI_RESET
 static uint8_t hci_process_hci_reset(uint16_t opcode)
 {
     /* OpCode: 0x0C03, Data Len: Cmd(3), Event(6) */
@@ -348,34 +355,34 @@ static struct {
     uint16_t opcode;
     uint8_t (*func)(uint16_t opcode);
 } hci_process_table[] = {
-#ifdef hci_platform_START_RF_CALIBRATION
+#if defined(hci_platform_START_RF_CALIBRATION) && hci_platform_START_RF_CALIBRATION
     {0,      hci_process_start_rf_calibration},
 #endif
-#ifdef hci_platform_START_IQK
+#if defined(hci_platform_START_IQK) && hci_platform_START_IQK
     {0xFD4A, hci_process_start_iqk},
 #endif
     {0x1001, hci_process_read_local_ver},
     {0xFC6D, hci_process_read_rom_ver},
     {0xFC17, hci_process_update_baudrate},
-#ifdef hci_platform_DOWNLOAD_PATCH
+#if defined(hci_platform_DOWNLOAD_PATCH) && hci_platform_DOWNLOAD_PATCH
     {0xFC20, hci_process_download_patch},
 #endif
-#ifdef hci_platform_MP_RESET_BAUDRATE
+#if defined(hci_platform_MP_RESET_BAUDRATE) && hci_platform_MP_RESET_BAUDRATE
     {0xFC17, hci_process_reset_baudrate},
 #endif
-#ifdef hci_platform_START_RX_DCK
+#if defined(hci_platform_START_RX_DCK) && hci_platform_START_RX_DCK
     {0,      hci_process_start_rx_dck},
 #endif
-#ifdef hci_platform_WRITE_PHY_EFUSE
+#if defined(hci_platform_WRITE_PHY_EFUSE) && hci_platform_WRITE_PHY_EFUSE
     {0xFD91, hci_process_write_phy_efuse},
 #endif
-#ifdef hci_platform_WRITE_RX_ADCK
+#if defined(hci_platform_WRITE_RX_ADCK) && hci_platform_WRITE_RX_ADCK
     {0xFD20, hci_process_write_rx_adck},
 #endif
-#ifdef hci_platform_SET_CUT_VER
+#if defined(hci_platform_SET_CUT_VER) && hci_platform_SET_CUT_VER
     {0xFDAC, hci_process_set_cut_ver},
 #endif
-#ifdef CONFIG_HCI_RESET
+#if defined(CONFIG_HCI_RESET) && CONFIG_HCI_RESET
     {0x0C03, hci_process_hci_reset},
 #endif
     {0,      NULL}
