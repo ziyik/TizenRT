@@ -17,12 +17,6 @@
 #ifndef _GAP_ISO_DATA_H_
 #define _GAP_ISO_DATA_H_
 
-#include "platform_opts_bt.h"
-
-#if UPPER_STACK_VERSION == VERSION_2021
-
-#include "gap.h"
-
 #ifdef  __cplusplus
 extern "C"
 {
@@ -31,6 +25,7 @@ extern "C"
 /*============================================================================*
  *                        Header Files
  *============================================================================*/
+#include "gap.h"
 
 /** @addtogroup GAP GAP Module
   * @{
@@ -185,8 +180,6 @@ T_GAP_CAUSE gap_iso_get_buffer_size(uint16_t *p_iso_data_packet_length,
 
 #ifdef  __cplusplus
 }
-#endif
-
 #endif
 
 #endif /* _GAP_ISO_DATA_H_ */
