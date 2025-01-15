@@ -15,7 +15,6 @@
 #include <gap_msg.h>
 #include <gap.h>
 #include <mem_types.h>
-#include <bt_utils.h>
 #include <rtk_client_config.h>
 #include <rtk_stack_config.h>
 
@@ -369,7 +368,7 @@ trble_result_e rtw_ble_client_conn_param_update(trble_conn_handle *conn_handle, 
 
 	if(conn_handle == NULL || conn_param == NULL)
 	{
-		debug_print("Invalid input \n");
+//		debug_print("Invalid input \n");
 		return TRBLE_INVALID_ARGS;
 	}
 
@@ -381,7 +380,7 @@ trble_result_e rtw_ble_client_conn_param_update(trble_conn_handle *conn_handle, 
 
 	if(RTK_BT_FAIL == rtk_bt_le_gap_update_conn_param(&param))
 	{
-		debug_print("connection update fail \n");
+//		debug_print("connection update fail \n");
 		return TRBLE_FAIL;
 	}
 	return TRBLE_SUCCESS; 

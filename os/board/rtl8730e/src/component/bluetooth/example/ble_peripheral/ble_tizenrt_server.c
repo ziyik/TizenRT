@@ -88,7 +88,7 @@ trble_result_e rtw_ble_server_get_mac_address(uint8_t mac[TRBLE_BD_ADDR_MAX_LEN]
 
 	rtk_bt_le_addr_t rtk_bd_addr;
 
-    if (RTK_BT_FAIL == rtk_bt_le_gap_get_address(&rtk_bd_addr)) {
+    if (RTK_BT_FAIL == rtk_bt_le_gap_get_bd_addr(&rtk_bd_addr)) {
         debug_print("Failed to get local addr. \n");
         return TRBLE_FAIL;
     }

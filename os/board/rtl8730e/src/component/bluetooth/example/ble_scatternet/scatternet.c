@@ -17,7 +17,6 @@
 #include <rtk_bt_gatts.h>
 #include <rtk_bt_gattc.h>
 
-#include <bt_utils.h>
 #include <rtk_service_config.h>
 #include <rtk_client_config.h>
 #include <rtk_gcs_client.h>
@@ -180,6 +179,14 @@ static rtk_bt_evt_cb_ret_t ble_tizenrt_scatternet_gap_app_callback(uint8_t evt_c
         rtk_bt_le_adv_start_ind_t *adv_start_ind = (rtk_bt_le_adv_start_ind_t *)param;
         if(!adv_start_ind->err)
             dbg("[APP] ADV started: adv_type %d  \r\n", adv_start_ind->adv_type);
+#if defined(RTK_BLE_PRIVACY_SUPPORT) && RTK_BLE_PRIVACY_SUPPORT
+//            if (privacy_enable) {
+//                uint8_t local_rpa[6] = {0};
+//                rtk_bt_le_gap_read_local_resolv_addr(RTK_BT_LE_IDENT_ADDR_PUBLIC, NULL, local_rpa);
+//                rtk_bt_addr_val_to_str(local_rpa, le_addr, sizeof(le_addr));
+//                printf("[APP] ADV use local RPA address: %s \r\n", le_addr);
+//            }
+#endif
         else
             dbg("[APP] ADV start failed, err 0x%x \r\n", adv_start_ind->err);
         break;
@@ -247,7 +254,7 @@ static rtk_bt_evt_cb_ret_t ble_tizenrt_scatternet_gap_app_callback(uint8_t evt_c
         rtk_bt_le_scan_res_ind_t *scan_res_ind = (rtk_bt_le_scan_res_ind_t *)param;
         rtk_bt_le_addr_to_str(&(scan_res_ind->adv_report.addr), le_addr, sizeof(le_addr));
 #if defined(CONFIG_DEBUG_SCAN_INFO)
-        debug_print("[APP] Scan info, [Device]: %s, AD evt type: %d, RSSI: %i\r\n", 
+        printf("[APP] Scan info, [Device]: %s, AD evt type: %d, RSSI: %i\r\n", 
                 le_addr, scan_res_ind->adv_report.evt_type, scan_res_ind->adv_report.rssi);
 #endif
 		trble_scanned_device scanned_device;
@@ -351,7 +358,7 @@ static rtk_bt_evt_cb_ret_t ble_tizenrt_scatternet_gap_app_callback(uint8_t evt_c
 						dbg("[APP] Start security flow failed!");
 					}
 				} else {
-					debug_print("LL connected %d, do not need pairing \n", conn_ind->conn_handle);
+					printf("LL connected %d, do not need pairing \n", conn_ind->conn_handle);
 					trble_device_connected connected_dev;
 					uint16_t mtu_size = 0;
 					if(RTK_BT_OK != rtk_bt_le_gap_get_mtu_size(conn_ind->conn_handle, &mtu_size)){
@@ -675,7 +682,7 @@ static rtk_bt_evt_cb_ret_t ble_tizenrt_scatternet_gap_app_callback(uint8_t evt_c
 #endif
 
     default:
-        debug_print("[APP] Unkown gap cb evt type: %d", evt_code);
+        printf("[APP] Unkown gap cb evt type: %d", evt_code);
         break;
 	}
 
@@ -797,7 +804,7 @@ static rtk_bt_evt_cb_ret_t ble_tizenrt_scatternet_gattc_app_callback(uint8_t eve
 		return RTK_BT_EVT_CB_OK;
 	}
 
-#if RTK_BLE_MGR_LIB
+#if defined(RTK_BLE_MGR_LIB) && RTK_BLE_MGR_LIB
 	if (RTK_BT_GATTC_EVT_DISCOVER_ALL_STATE_IND == event) {
 		rtk_bt_gattc_discover_all_state_ind_t *p_ind = (rtk_bt_gattc_discover_all_state_ind_t *)data;
 		printf("[APP] GATTC discover all finished: conn_handle: %d, is_success: %d, load_from_storage: %d\r\n",
@@ -830,7 +837,6 @@ static rtk_bt_evt_cb_ret_t ble_tizenrt_scatternet_gattc_app_callback(uint8_t eve
 	return RTK_BT_EVT_CB_OK;
 }
 
-extern bool rtk_bt_pre_enable(void);
 int ble_tizenrt_scatternet_main(uint8_t enable)
 {
     rtk_bt_app_conf_t bt_app_conf = {0};
@@ -845,11 +851,6 @@ int ble_tizenrt_scatternet_main(uint8_t enable)
 
 	if (1 == enable)
 	{
-        if (rtk_bt_pre_enable() == false) {
-            dbg("%s fail!\r\n", __func__);
-            return -1;
-        }
-
         //set GAP configuration
 		bt_app_conf.app_profile_support = RTK_BT_PROFILE_GATTS | RTK_BT_PROFILE_GATTC;
 		bt_app_conf.mtu_size = 512;
@@ -868,7 +869,7 @@ int ble_tizenrt_scatternet_main(uint8_t enable)
         /* Enable BT */
 		
 		BT_APP_PROCESS(rtk_bt_enable(&bt_app_conf)); 
-        BT_APP_PROCESS(rtk_bt_le_gap_get_address(&bd_addr));
+        BT_APP_PROCESS(rtk_bt_le_gap_get_bd_addr(&bd_addr));
         rtk_bt_le_addr_to_str(&bd_addr, addr_str, sizeof(addr_str));
         dbg("[APP] BD_ADDR: %s\r\n", addr_str);
 		BT_APP_PROCESS(rtk_bt_le_gap_set_scan_param(&scan_param));

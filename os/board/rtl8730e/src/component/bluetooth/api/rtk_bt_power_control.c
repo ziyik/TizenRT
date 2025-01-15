@@ -4,16 +4,12 @@
  *******************************************************************************
  */
 #include <bt_api_config.h>
+#include "platform_autoconf.h"
 #if defined(RTK_BT_POWER_CONTROL_SUPPORT) && RTK_BT_POWER_CONTROL_SUPPORT
 #include <stdio.h>
 #include <string.h>
 #include <osif.h>
 #include <basic_types.h>
-#include <platform_opts_bt.h>
-#if defined(CONFIG_BT_AP) && CONFIG_BT_AP
-#include <bt_ipc_host_api.h>
-#include <bt_ipc_profile_config.h>
-#endif
 #include "rtk_bt_power_control.h"
 #include "ameba_soc.h"
 #include "wifi_conf.h"
@@ -46,9 +42,7 @@ static uint32_t rtk_bt_suspend(uint32_t expected_idle_time, void *param)
 	pmvdbg("[BT_PS] Enter rtk_bt_suspend\r\n");
 
 #ifndef CONFIG_PLATFORM_TIZENRT_OS
-#if defined(CONFIG_BT_SINGLE_CORE) && CONFIG_BT_SINGLE_CORE
 	hci_platform_force_uart_rts(true);
-#endif
 #endif
 	rtk_bt_enable_bt_wake_host();
 
@@ -65,9 +59,7 @@ static uint32_t rtk_bt_resume(uint32_t expected_idle_time, void *param)
 	rtk_bt_disable_bt_wake_host();
 
 #ifndef CONFIG_PLATFORM_TIZENRT_OS
-#if defined(CONFIG_BT_SINGLE_CORE) && CONFIG_BT_SINGLE_CORE
 	hci_platform_force_uart_rts(false);
-#endif
 #endif
 
 	return 1;

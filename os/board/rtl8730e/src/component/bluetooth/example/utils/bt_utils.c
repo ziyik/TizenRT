@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <rtk_bt_le_gap.h>
 #include <bt_utils.h>
 
 static uint8_t ctoi(char c)
@@ -70,7 +69,7 @@ bool hexdata_str_to_bd_addr(char *str, uint8_t *addr_buf, uint8_t buf_len)
 	uint32_t n = 0;
 	uint8_t num = 0;
 
-	if (str_len != 2 * RTK_BD_ADDR_LEN || buf_len < RTK_BD_ADDR_LEN) {
+	if (str_len != 2 * 6 || buf_len < 6) {
 		printf("[%s]Error: Invalid bd addr string\r\n",__func__);
 		return FALSE;
 	}

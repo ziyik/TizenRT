@@ -64,7 +64,11 @@ uint16_t gaps_client_srv_discover(uint16_t conn_handle)
 	if (!conn_gaps_db) {
 		return RTK_BT_ERR_NO_ENTRY;
 	}
-
+	if (!len) {
+		printf("[APP] GAPS client read value is empty!\r\n");
+		return;
+	}
+	
 	disc_param.profile_id = GAPS_CLIENT_PROFILE_ID;
 	disc_param.conn_handle = conn_handle;
 	disc_param.type = RTK_BT_GATT_DISCOVER_PRIMARY_BY_UUID;

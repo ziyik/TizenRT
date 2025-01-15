@@ -6,7 +6,6 @@
 
 #include <stdio.h>
 
-#include <bt_utils.h>
 #include <rtk_bt_def.h>
 #include <rtk_bt_common.h>
 #include <rtk_bt_att_defs.h>
@@ -148,6 +147,10 @@ void general_client_read_res_hdl(void *data)
 		APP_PRINT_SEPARATOR();
 		return;
 	} else if(RTK_BT_STATUS_CONTINUE == read_status) {
+		if (!read_res->by_handle.len) {
+			printf("[APP] GATT client read value is empty!\r\n");
+			return;
+		}
 		switch(read_res->type) {
 		case RTK_BT_GATT_CHAR_READ_BY_HANDLE:
 			handle = read_res->by_handle.handle;
@@ -234,9 +237,13 @@ void general_client_write_res_hdl(void *data)
 void general_client_notify_hdl(void *data)
 {
 	rtk_bt_gattc_cccd_value_ind_t *ntf_ind = (rtk_bt_gattc_cccd_value_ind_t *)data;
+	
+	if (!ntf_ind->len) {
+		printf("[APP] GATTC notify received value is empty!\r\n");
+		return;
+	}
 	printf("[APP] GATTC notify received, profile_id: %d, conn_handle: %d, handle: 0x%x\r\n",
 			ntf_ind->profile_id, ntf_ind->conn_handle, ntf_ind->value_handle);
-	
 	gattc_dump(ntf_ind->len, ntf_ind->value, (uint8_t *)"notify event");
 	trble_data read_result;
 	read_result.length = ntf_ind->len;
@@ -255,6 +262,11 @@ void general_client_indicate_hdl(void *data)
 {
 //	rtk_bt_gattc_cfm_param_t cfm_param = {0};
 	rtk_bt_gattc_cccd_value_ind_t *indicate_ind = (rtk_bt_gattc_cccd_value_ind_t *)data;
+
+	if (!indicate_ind->len) {
+		printf("[APP] GATTC indicate received value is empty!\r\n");
+		return;
+	}
 
 	printf("[APP] GATTC indicate received, profile_id: %d, conn_handle: %d, handle: 0x%x\r\n",
 			indicate_ind->profile_id, indicate_ind->conn_handle, indicate_ind->value_handle);
