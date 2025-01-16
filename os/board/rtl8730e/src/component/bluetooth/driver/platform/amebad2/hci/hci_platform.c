@@ -706,7 +706,12 @@ uint8_t hci_platform_deinit(void)
 
 void hci_platform_record_chipid(uint8_t chipid)
 {
-	hci_chipid_in_fw = chipid;
+	uint8_t buf = hci_platform_get_rom_ver();
+	if (chipid == 2 && hci_platform_get_rom_ver() >= 3) {
+		hci_chipid_in_fw = 3;
+	} else {
+		hci_chipid_in_fw = chipid;
+	}
 }
 
 void hci_platform_get_baudrate(uint8_t *baudrate, uint8_t len, uint8_t init_or_work)
