@@ -10,6 +10,14 @@
 #define OSIF_ALIGN 64
 #define OSIF_ALIGN_MASK 0x003f
 
+#define OSIF_MQ_LIST_NUM 18
+typedef struct {
+	uint8_t open;
+	void *p_handle;
+	char mq_name[9];
+} mq_list;
+mq_list cur_mq_list[OSIF_MQ_LIST_NUM] = { 0 };
+
 /****************************************************************************/
 /* Check if in task context (true), or isr context (false)                  */
 /****************************************************************************/
@@ -112,6 +120,8 @@ bool osif_task_create(void **pp_handle, const char *p_name, void (*p_routine)(vo
 		return _FAIL;
 	}
 
+lldbg("%s create getpid: %d\n", p_name, getpid());
+
 	task_info[0] = itoa((int) p_routine, routine_addr, 16);
 	task_info[1] = itoa((int) p_param, param_addr, 16);
 	task_info[2] = NULL;
@@ -126,6 +136,7 @@ bool osif_task_create(void **pp_handle, const char *p_name, void (*p_routine)(vo
 		return _FAIL;
 	}
 
+lldbg("pid %d\n", pid);
 	*pp_handle = (void *) ((uint32_t) pid);
 
 	return _SUCCESS;
@@ -452,6 +463,91 @@ bool osif_mutex_give(void *p_handle)
 }
 
 /****************************************************************************/
+/* save msg queue name in list                                              */
+/****************************************************************************/
+static void osif_save_mq_name(void *p_handle, char *mq_name)
+{
+	for (int i = 0; i < OSIF_MQ_LIST_NUM; i++) {
+		if (cur_mq_list[i].p_handle == NULL) {
+			cur_mq_list[i].open = 0;
+			cur_mq_list[i].p_handle = p_handle;
+			strcpy(cur_mq_list[i].mq_name, mq_name);
+			lldbg("getpid: %d\n", getpid());
+			lldbg("cur_mq_list[%d].p_handle: %x\n", i, cur_mq_list[i].p_handle);
+			lldbg("cur_mq_list[%d].mq_name: %s\n", i, cur_mq_list[i].mq_name);
+			return;
+		}
+	}
+	lldbg("cur_mq_list is full!\n");
+}
+
+/****************************************************************************/
+/* remove msg queue name in list                                              */
+/****************************************************************************/
+static void osif_remove_mq_name(void *p_handle)
+{
+	for (int i = 0; i < OSIF_MQ_LIST_NUM; i++) {
+		if (cur_mq_list[i].p_handle == p_handle) {
+			cur_mq_list[i].open = 0;
+			cur_mq_list[i].p_handle = NULL;
+			return;
+		}
+	}
+	dbg("p_handle no in cur_mq_list!\n");
+}
+
+/****************************************************************************/
+/* open msg queue name in list                                              */
+/****************************************************************************/
+static void *osif_open_mq(void *p_handle)
+{
+	struct mq_attr attr;
+	mqd_t pmqd;
+	for (int i = 0; i < OSIF_MQ_LIST_NUM; i++) {
+		if (cur_mq_list[i].p_handle == p_handle) {
+lldbg("cur_mq_list[%d].p_handle: %x, getpid: %d\n", i, cur_mq_list[i].p_handle, getpid());
+lldbg("cur_mq_list[%d].mq_name: %s\n", i, cur_mq_list[i].mq_name);
+			pmqd = mq_open((const char *) cur_mq_list[i].mq_name, O_RDWR, 0666, &attr);	/* Secure Fault happen */
+			if (pmqd == (mqd_t) ERROR) {
+				lldbg("mq_open Error: %d\n", get_errno());
+				return NULL;
+			}
+			return pmqd;
+		}
+	}
+	lldbg("p_handle no in cur_mq_list!\n");
+	return NULL;
+}
+
+/****************************************************************************/
+/* open msg queue name in list for mq_receive                               */
+/****************************************************************************/
+static void *osif_open_mq_recv(void *p_handle)
+{
+	struct mq_attr attr;
+	mqd_t pmqd;
+	for (int i = 0; i < OSIF_MQ_LIST_NUM; i++) {
+		if (cur_mq_list[i].p_handle == p_handle) {
+lldbg("cur_mq_list[%d].p_handle: %x, getpid: %d\n", i, cur_mq_list[i].p_handle, getpid());
+lldbg("cur_mq_list[%d].mq_name: %s\n", i, cur_mq_list[i].mq_name);
+			if (cur_mq_list[i].open == 1) {
+				return;
+			}
+			pmqd = mq_open((const char *) cur_mq_list[i].mq_name, O_RDWR, 0666, &attr);	/* Secure Fault happen */
+			if (pmqd == (mqd_t) ERROR) {
+				lldbg("mq_open Error: %d\n", get_errno());
+				return NULL;
+			} else {
+				cur_mq_list[i].open = 1;
+				return pmqd;
+			}
+		}
+	}
+	lldbg("p_handle no in cur_mq_list!\n");
+	return NULL;
+}
+
+/****************************************************************************/
 /* Create inter-thread message queue                                        */
 /****************************************************************************/
 bool osif_msg_queue_create(void **pp_handle, uint32_t msg_num, uint32_t msg_size)
@@ -467,6 +563,8 @@ bool osif_msg_queue_create(void **pp_handle, uint32_t msg_num, uint32_t msg_size
 		dbg("pp_handle is NULL\n");
 		return _FAIL;
 	}
+//dbg("pp_handle: %x\n", pp_handle);
+
 
 	if (*pp_handle) {
 		dbg("msg queue already init\n");
@@ -477,6 +575,9 @@ bool osif_msg_queue_create(void **pp_handle, uint32_t msg_num, uint32_t msg_size
 	attr.mq_msgsize = msg_size > MQ_MAX_BYTES? MQ_MAX_BYTES : msg_size;
 
 	itoa((int) pp_handle, mq_name, 16);
+	struct tcb_s *nexttcb = this_task();
+//lldbg("mq_name: %s getpid: %d\n", mq_name, getpid());
+//lldbg("task_name: %s getpid: %d\n", nexttcb->name, getpid());
 
 	pmqd = mq_open((const char *) mq_name, O_RDWR | O_CREAT, 0666, &attr);
 	if (pmqd == (mqd_t) ERROR) {
@@ -486,6 +587,9 @@ bool osif_msg_queue_create(void **pp_handle, uint32_t msg_num, uint32_t msg_size
 	}
 
 	*pp_handle = pmqd;
+//dbg("pmqd: %x\n", pmqd);
+//lldbg("*pp_handle: %x getpid: %d\n", *pp_handle, getpid());
+	osif_save_mq_name(pmqd, mq_name);
 
 	return _SUCCESS;
 }
@@ -501,7 +605,7 @@ bool osif_msg_queue_delete(void *p_handle)
 		dbg("p_handle is NULL\n");
 		return _FAIL;
 	}
-
+	osif_remove_mq_name(p_handle);
 	if(mq_close((mqd_t) p_handle) != OK) {
 		ret = get_errno();
 		dbg("mq 0x%x close fail: %d\n", p_handle, ret);
@@ -536,6 +640,7 @@ bool osif_msg_queue_peek(void *p_handle, uint32_t *p_msg_num)
 /****************************************************************************/
 bool osif_msg_send(void *p_handle, void *p_msg, uint32_t wait_ms)
 {
+	void *new_p_handle = p_handle;
 	int prio = MQ_PRIO_MAX;
 	int ret;
 
@@ -544,6 +649,19 @@ bool osif_msg_send(void *p_handle, void *p_msg, uint32_t wait_ms)
 		return _FAIL;
 	}
 
+//lldbg("p_handle: %x\n", p_handle);	/* Secure Fault happen */
+//lldbg("p_handle:\n");	/* Secure Fault happen */
+//lldbg("p_handle: %x\n", p_handle);	/* No Secure Fault happen */
+//lldbg("p_handle: %x\n", p_handle);	/* No Secure Fault happen */
+//lldbg("p_handle: %x\n", p_handle);	/* No Secure Fault happen */
+#if 1
+if (osif_task_context_check() == true) {
+//lldbg("before open: %x getpid: %d\n", p_handle, getpid());	/* No Secure Fault happen */
+	new_p_handle = osif_open_mq(p_handle);
+} else {
+lldbg("osif_task_context_check: %x\n", p_handle);	/* No Secure Fault happen */
+}
+#endif
 	if (wait_ms != 0xFFFFFFFF && osif_task_context_check() == true) {
 		struct timespec ts;
 		clock_gettime(CLOCK_REALTIME, &ts);
@@ -553,15 +671,21 @@ bool osif_msg_send(void *p_handle, void *p_msg, uint32_t wait_ms)
 			ts.tv_sec ++;
 			ts.tv_nsec -= NSEC_PER_SEC;
 		}
-		if (mq_timedsend((mqd_t) p_handle, p_msg, ((mqd_t) p_handle)->msgq->maxmsgsize, prio, &ts) != OK) {
+
+lldbg("mq_timedsend: %x, getpid: %d\n", new_p_handle, getpid());	/* No Secure Fault happen */
+//lldbg("p_handle: %x\n", new_p_handle);
+		if (mq_timedsend((mqd_t) new_p_handle, p_msg, ((mqd_t) new_p_handle)->msgq->maxmsgsize, prio, &ts) != OK) {
 			ret = get_errno();
-			dbg("mq time send fail: %d\n", ret);
+			lldbg("mq time send fail: %d\n", ret);
+			lldbg("wait_ms: %d\n", wait_ms);
 			return _FAIL;
 		}
 	} else {
-		if (mq_send((mqd_t) p_handle, p_msg, ((mqd_t) p_handle)->msgq->maxmsgsize, prio) != OK) {
+lldbg("mq_send: %x\n", new_p_handle);	/* No Secure Fault happen */
+//lldbg("p_handle: %x\n", new_p_handle);	/* Secure Fault happen */
+		if (mq_send((mqd_t) new_p_handle, p_msg, ((mqd_t) new_p_handle)->msgq->maxmsgsize, prio) != OK) {
 			ret = get_errno();
-			dbg("mq send fail: %d\n", ret);
+			lldbg("mq send fail: %d\n", ret);
 			return _FAIL;
 		}
 	}
@@ -582,6 +706,10 @@ bool osif_msg_recv(void *p_handle, void *p_msg, uint32_t wait_ms)
 		return _FAIL;
 	}
 
+//lldbg("p_handle: %x\n", p_handle);
+//lldbg("before open: %x getpid: %d\n", p_handle, getpid());	/* No Secure Fault happen */
+	osif_open_mq_recv(p_handle);
+
 	if (wait_ms != 0xFFFFFFFF) {
 		struct timespec ts;
 		clock_gettime(CLOCK_REALTIME, &ts);
@@ -595,14 +723,16 @@ bool osif_msg_recv(void *p_handle, void *p_msg, uint32_t wait_ms)
 			ret = get_errno();
 			if (ETIMEDOUT != ret)
 			{
-				dbg("mq time receive fail errno: %d\n", ret);
+				lldbg("mq time receive fail errno: %d\n", ret);
+				lldbg("p_handle: %x, getpid: %d\n", p_handle, getpid());
 			}
 			return _FAIL;
 		}
 	} else {
 		if (mq_receive((mqd_t) p_handle, p_msg, ((mqd_t) p_handle)->msgq->maxmsgsize, &prio) == ERROR) {
 			ret = get_errno();
-			dbg("mq receive fail: %d\n", ret);
+			lldbg("mq receive fail: %d\n", ret);
+			lldbg("p_handle: %x, getpid: %d\n", p_handle, getpid());
 			return _FAIL;
 		}
 	}

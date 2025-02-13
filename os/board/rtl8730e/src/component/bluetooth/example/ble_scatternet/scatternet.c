@@ -843,27 +843,18 @@ static rtk_bt_evt_cb_ret_t ble_tizenrt_scatternet_gattc_app_callback(uint8_t eve
 
 	return RTK_BT_EVT_CB_OK;
 }
-
-extern bool rtk_bt_pre_enable(void);
-int ble_tizenrt_scatternet_main(uint8_t enable)
+static int bt_enable_api(void)
 {
     rtk_bt_app_conf_t bt_app_conf = {0};
-    rtk_bt_le_addr_t bd_addr = {(rtk_bt_le_addr_type_t)0, {0}};
+	rtk_bt_le_addr_t bd_addr = {(rtk_bt_le_addr_type_t)0, {0}};
 	rtk_bt_le_adv_filter_t adv_filter_policy = RTK_BT_LE_ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
-    char addr_str[30] = {0};
-    char name[30] = {0};
+	char addr_str[30] = {0};
+	char name[30] = {0};
 
 #if RTK_BLE_PRIVACY_SUPPORT
 		uint8_t bond_size = 0;
 #endif
-
-	if (1 == enable)
-	{
-        if (rtk_bt_pre_enable() == false) {
-            dbg("%s fail!\r\n", __func__);
-            return -1;
-        }
-
+lldbg(" rtk_bt_pre_enable after\r\n");
         //set GAP configuration
 		bt_app_conf.app_profile_support = RTK_BT_PROFILE_GATTS | RTK_BT_PROFILE_GATTC;
 		bt_app_conf.mtu_size = 512;
@@ -893,27 +884,75 @@ int ble_tizenrt_scatternet_main(uint8_t enable)
         BT_APP_PROCESS(rtk_bt_le_gap_set_appearance(RTK_BT_LE_GAP_APPEARANCE_HEART_RATE_BELT));
         BT_APP_PROCESS(rtk_bt_le_sm_set_security_param(&sec_param));
 #if (RTK_BLE_5_0_AE_ADV_SUPPORT==0)
-        BT_APP_PROCESS(rtk_bt_le_gap_set_adv_data(adv_data,sizeof(adv_data)));
-        BT_APP_PROCESS(rtk_bt_le_gap_set_scan_rsp_data(scan_rsp_data,sizeof(scan_rsp_data)));
+	BT_APP_PROCESS(rtk_bt_le_gap_set_adv_data(adv_data,sizeof(adv_data)));
+	BT_APP_PROCESS(rtk_bt_le_gap_set_scan_rsp_data(scan_rsp_data,sizeof(scan_rsp_data)));
 #endif
 
 #if RTK_BLE_PRIVACY_SUPPORT
-		if(privacy_enable) {
-			BT_APP_PROCESS(rtk_bt_le_gap_privacy_init(privacy_whitelist));
-			BT_APP_PROCESS(rtk_bt_le_sm_get_bond_num(&bond_size));
-			if(privacy_whitelist && bond_size != 0)
-				adv_filter_policy = RTK_BT_LE_ADV_FILTER_ALLOW_SCAN_WLST_CON_WLST;
-		}
+	if(privacy_enable) {
+		BT_APP_PROCESS(rtk_bt_le_gap_privacy_init(privacy_whitelist));
+		BT_APP_PROCESS(rtk_bt_le_sm_get_bond_num(&bond_size));
+		if(privacy_whitelist && bond_size != 0)
+			adv_filter_policy = RTK_BT_LE_ADV_FILTER_ALLOW_SCAN_WLST_CON_WLST;
+	}
 #endif
 
-        /* gatts related */
-        BT_APP_PROCESS(rtk_bt_evt_register_callback(RTK_BT_LE_GP_GATTS, 
-                                                    (rtk_bt_evt_cb_t)ble_tizenrt_scatternet_gatts_app_callback));
-		BT_APP_PROCESS(ble_tizenrt_srv_add());
-        /* gattc related */
-        BT_APP_PROCESS(rtk_bt_evt_register_callback(RTK_BT_LE_GP_GATTC, 
-                                                    (rtk_bt_evt_cb_t)ble_tizenrt_scatternet_gattc_app_callback));
-        BT_APP_PROCESS(general_client_add());
+	/* gatts related */
+	BT_APP_PROCESS(rtk_bt_evt_register_callback(RTK_BT_LE_GP_GATTS, 
+												(rtk_bt_evt_cb_t)ble_tizenrt_scatternet_gatts_app_callback));
+	BT_APP_PROCESS(ble_tizenrt_srv_add());
+	/* gattc related */
+	BT_APP_PROCESS(rtk_bt_evt_register_callback(RTK_BT_LE_GP_GATTC, 
+												(rtk_bt_evt_cb_t)ble_tizenrt_scatternet_gattc_app_callback));
+	BT_APP_PROCESS(general_client_add());
+
+	return 1;
+}
+
+static void *bt_enable_task_hdl = NULL;
+int bt_enable_status = 0xFF;
+static void bt_enable_task(void *ctx)
+{
+	(void)ctx;
+	struct tcb_s *nexttcb = this_task();
+
+	bt_enable_status = bt_enable_api();
+out:
+	osif_task_delete(NULL);
+}
+
+static void bt_enable_init(void)
+{
+	if (false == osif_task_create(&bt_enable_task_hdl, "bt_enable_task", bt_enable_task, NULL,
+								  API_TASK_STACK_SIZE, API_TASK_PRIORITY)) {
+		printf("%s bt_enable_task create fail \r\n", __func__);
+	}
+}
+
+
+extern bool rtk_bt_pre_enable(void);
+int ble_tizenrt_scatternet_main(uint8_t enable)
+{
+lldbg(" enterd\r\n");
+	if (1 == enable)
+	{
+lldbg(" rtk_bt_pre_enable before\r\n");
+        if (rtk_bt_pre_enable() == false) {
+            dbg("%s fail!\r\n", __func__);
+            return -1;
+        }
+
+        /* Enable BT */
+		bt_enable_status = 0xFF;
+		bt_enable_init();
+ lldbg(" bt_enable_init all done\r\n");
+		while (bt_enable_status == 0xFF) {
+			osif_delay(5);
+		}
+		if (bt_enable_status != 1) {
+			return -1;
+		}
+
 #if (defined(RTK_BT_POWER_CONTROL_SUPPORT) && RTK_BT_POWER_CONTROL_SUPPORT)
 		rtk_bt_power_save_init();
 #endif

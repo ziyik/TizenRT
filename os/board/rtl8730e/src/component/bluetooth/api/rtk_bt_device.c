@@ -59,8 +59,9 @@ uint16_t rtk_bt_enable(rtk_bt_app_conf_t *app_default_conf)
 		printf("%s: bt has been enabled \r\n", __func__);
 		return RTK_BT_ERR_ALREADY_DONE;
 	}
-
+lldbg(" rtk_bt_evt_init before: %d\r\n", err);
 	err = rtk_bt_evt_init();
+lldbg(" rtk_bt_evt_init done: %d\r\n", err);
 	if (err) {
 		return err;
 	}
@@ -92,8 +93,10 @@ uint16_t rtk_bt_enable(rtk_bt_app_conf_t *app_default_conf)
 		if (ret[0] != RTK_BT_OK) {
 			printf("[core AP][IPC] %s fail ! \r\n", __func__);
 		} else {
+lldbg(" rtk_bt_device_copy_act_ret_param before\r\n");
 			/* check whether need memcpy return value */
 			rtk_bt_device_copy_act_ret_param(RTK_BT_DEVICE_IPC_ACT_BT_ENABLE, (void *)app_default_conf, &ret[1]);
+lldbg(" rtk_bt_device_copy_act_ret_param after\r\n");
 		}
 		err = (uint16_t)ret[0];
 		osif_mem_free(ret);
@@ -102,7 +105,9 @@ exit:
 			osif_mem_free(host_msg);
 	}
 #else
+lldbg(" bt_stack_enable before, getpid: %d\r\n", getpid());
 	err = bt_stack_enable(app_default_conf);
+lldbg(" bt_stack_enable after, getpid: %d\r\n", getpid());
 #endif
 	if (err) {
 		rtk_bt_evt_deinit();
@@ -113,7 +118,7 @@ exit:
 #endif
 		return err;
 	}
-
+lldbg(" b_bt_enabled done\r\n");
 	/* set the bt enable flag on */
 	b_bt_enabled = true;
 

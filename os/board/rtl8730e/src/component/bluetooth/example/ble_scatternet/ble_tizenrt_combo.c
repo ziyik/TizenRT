@@ -53,13 +53,13 @@ trble_result_e rtw_ble_combo_init(trble_client_init_config* init_client, trble_s
     } else if(is_server_init != false || client_init_parm != NULL) {
         return TRBLE_INVALID_STATE;
     }
-
+lldbg(" client_init_parm\r\n");
     client_init_parm = (trble_client_init_config *)osif_mem_alloc(0, sizeof(trble_client_init_config));
     if (client_init_parm == NULL) {
         debug_print("Memory allocation failed \n");
         return TRBLE_FAIL;
     }
-
+lldbg(" ble_tizenrt_scatternet_conn_ind\r\n");
     ble_tizenrt_scatternet_conn_ind = (rtk_bt_le_conn_ind_t *)osif_mem_alloc(0, sizeof(rtk_bt_le_conn_ind_t));
     if (ble_tizenrt_scatternet_conn_ind == NULL) {
         debug_print("Memory allocation failed \n");
@@ -69,7 +69,7 @@ trble_result_e rtw_ble_combo_init(trble_client_init_config* init_client, trble_s
     ble_write_request_result = &g_scatternet_write_result;
     ble_write_no_rsp_result = &g_scatternet_write_no_rsp_result;
     ble_read_results = ble_tizenrt_scatternet_read_results;
-
+lldbg(" init client\r\n");
     //init client
     client_init_parm->trble_scan_state_changed_cb = init_client->trble_scan_state_changed_cb;
     client_init_parm->trble_device_scanned_cb = init_client->trble_device_scanned_cb;
@@ -78,7 +78,7 @@ trble_result_e rtw_ble_combo_init(trble_client_init_config* init_client, trble_s
     client_init_parm->trble_operation_notification_cb = init_client->trble_operation_notification_cb;
     client_init_parm->trble_operation_indication_cb = init_client->trble_operation_indication_cb;
     client_init_parm->mtu = init_client->mtu;
-
+lldbg(" init server\r\n");
     //init server
     server_profile_count = init_server->profile_count;
     uint16_t gatt_char_num = 0;
@@ -95,7 +95,7 @@ trble_result_e rtw_ble_combo_init(trble_client_init_config* init_client, trble_s
     server_init_parm.mtu_update_cb = init_server->mtu_update_cb;
     server_init_parm.passkey_display_cb = init_server->passkey_display_cb;
     server_init_parm.is_secured_connect_allowed = init_server->is_secured_connect_allowed;
-
+lldbg(" ble_tizenrt_scatternet_main\r\n");
     ble_tizenrt_scatternet_main(1);
     is_server_init = true;
     return TRBLE_SUCCESS; 

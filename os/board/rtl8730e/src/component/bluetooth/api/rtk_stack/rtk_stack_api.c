@@ -52,6 +52,7 @@ extern struct amebad2_uart_t *amebad2_uart;
 #endif
 static void *api_task_sem = NULL;
 static void *api_task_hdl = NULL;
+static void *gap_task_hdl = NULL;
 static void *api_task_io_msg_q = NULL;
 static void *api_task_evt_msg_q = NULL;
 static bool api_task_running = false;
@@ -68,6 +69,16 @@ static void bt_stack_api_taskentry(void *ctx)
 	rtk_bt_cmd_t *api_cmd;
 
 	osif_sem_give(api_task_sem);
+
+	if (false == osif_msg_queue_create(&api_task_evt_msg_q, API_TASK_EVT_MSG_QUEUE, sizeof(uint8_t))) {
+		API_PRINT("[BT api task] api_task_evt_msg_q create fail!\r\n");
+		goto out;
+	}
+
+	if (false == osif_msg_queue_create(&api_task_io_msg_q, API_TASK_IO_MSG_QUEUE_SIZE, sizeof(T_IO_MSG))) {
+		API_PRINT("[BT api task] api_task_io_msg_q create fail\r\n");
+		goto out;
+	}
 
 #if defined(configENABLE_TRUSTZONE) && (configENABLE_TRUSTZONE == 1)
 	osif_create_secure_context(configMINIMAL_SECURE_STACK_SIZE + 256);
@@ -420,14 +431,6 @@ static uint16_t bt_stack_api_init(void)
 	bt_stack_pending_cmd_init();
 
 	if (false == osif_sem_create(&api_task_sem, 0, 1)) {
-		goto failed;
-	}
-
-	if (false == osif_msg_queue_create(&api_task_io_msg_q, API_TASK_IO_MSG_QUEUE_SIZE, sizeof(T_IO_MSG))) {
-		goto failed;
-	}
-
-	if (false == osif_msg_queue_create(&api_task_evt_msg_q, API_TASK_EVT_MSG_QUEUE, sizeof(uint8_t))) {
 		goto failed;
 	}
 
