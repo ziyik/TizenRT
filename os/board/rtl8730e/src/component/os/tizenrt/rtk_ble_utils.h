@@ -24,6 +24,12 @@
 extern trble_result_e rtw_ble_combo_init(trble_client_init_config* init_client, trble_server_init_config* init_server);
 extern trble_result_e rtw_ble_combo_deinit(void);
 extern trble_result_e rtw_ble_combo_add_profile(trble_server_init_config* init_server);
+
+extern void rtw_ble_combo_add_advstatus(uint8_t adv_handle, uint16_t adv_interval);
+extern void rtw_ble_combo_update_advstatus(uint8_t adv_handle, uint8_t adv_start);
+extern void rtw_ble_combo_update_connnectstatus(uint8_t conn_handle, uint8_t connected, uint16_t conn_interval);
+extern void rtw_ble_combo_print_ble_status(void);
+extern void rtw_ble_combo_clear_status(void);
 #elif defined(CONFIG_AMEBALITE_BLE_CENTRAL)
 extern trble_result_e rtw_ble_client_init(trble_client_init_config* init_parm);
 extern trble_result_e rtw_ble_client_deinit(void);
