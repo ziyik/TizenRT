@@ -1482,6 +1482,11 @@ static void rtk_bt_drc_evt_taskentry(void *ctx)
 	printf("[Bt evt task]: enter bt directly calling evt task\r\n");
 	osif_sem_give(g_drc_evt_task_sem);
 
+	if (false == osif_msg_queue_create(&g_drc_evt_queue, EVENT_NUM, sizeof(void *))) {
+		printf("[Bt evt task]: g_drc_evt_queue create fail!\r\n");
+		return;
+	}
+
 	while (true) {
 		if (osif_msg_recv(g_drc_evt_queue, &pevt, BT_TIMEOUT_FOREVER)) {
 			/* Check msg */
@@ -1530,6 +1535,11 @@ static void rtk_bt_evt_taskentry(void *ctx)
 	rtk_bt_evt_t *pevt;
 
 	osif_sem_give(g_evt_task_sem);
+
+	if (false == osif_msg_queue_create(&g_evt_queue, EVENT_NUM, sizeof(void *))) {
+		printf("[Bt evt task]: g_evt_queue create fail!\r\n");
+		return;
+	}
 
 	while (true) {
 		if (osif_msg_recv(g_evt_queue, &pevt, 0xffffffff)) {
@@ -1580,16 +1590,13 @@ static void rtk_bt_evt_taskentry(void *ctx)
 
 uint16_t rtk_bt_evt_init(void)
 {
+dbg(" enter enter \r\n\n");
 #if defined (CONFIG_BT_AP) && CONFIG_BT_AP
 	/* directly calling component */
 	if (false == osif_sem_create(&g_drc_evt_task_sem, 0, 1)) {
 		goto failed;
 	}
-
-	if (false == osif_msg_queue_create(&g_drc_evt_queue, EVENT_NUM, sizeof(void *))) {
-		goto failed;
-	}
-
+dbg(" first first \r\n\n");
 	if (false == osif_task_create(&g_drc_evt_task_hdl, "bt_drc_event_task",
 								  rtk_bt_drc_evt_taskentry, NULL,
 								  EVENT_TASK_STACK_SIZE, EVENT_TASK_PRIORITY)) {
@@ -1599,18 +1606,14 @@ uint16_t rtk_bt_evt_init(void)
 	if (false == osif_sem_take(g_drc_evt_task_sem, 0xffffffff)) {
 		goto failed;
 	}
-
+dbg(" second second \r\n\n");
 	memset((void *)&bt_ipc_drc_evt, 0, sizeof(rtk_bt_evt_t));
 	memset((void *)&bt_ipc_common_evt, 0, sizeof(rtk_bt_evt_t));
 #endif
 	if (false == osif_sem_create(&g_evt_task_sem, 0, 1)) {
 		goto failed;
 	}
-
-	if (false == osif_msg_queue_create(&g_evt_queue, EVENT_NUM, sizeof(void *))) {
-		goto failed;
-	}
-
+dbg(" third third \r\n\n");
 	if (false == osif_task_create(&g_evt_task_hdl, "bt_event_task",
 								  rtk_bt_evt_taskentry, NULL,
 								  EVENT_TASK_STACK_SIZE, EVENT_TASK_PRIORITY)) {
@@ -1620,7 +1623,7 @@ uint16_t rtk_bt_evt_init(void)
 	if (false == osif_sem_take(g_evt_task_sem, 0xffffffff)) {
 		goto failed;
 	}
-
+dbg(" event_task_running: %d\r\n", event_task_running);
 	event_task_running = true;
 	return 0;
 
