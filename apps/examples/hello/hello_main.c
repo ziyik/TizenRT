@@ -61,12 +61,93 @@
  * hello_main
  ****************************************************************************/
 
+void hello_task(void *param)
+{
+	uint8_t pass_param[2];
+	printf("Entering\n");
+
+	memcpy(pass_param, param, sizeof(pass_param));
+	printf("pass_param[0]: %x\n", pass_param[0]);
+	printf("pass_param[1]: %x\n", pass_param[1]);
+}
+
+bool hello_task_create(void *pp_handle, const char *p_name, void (*p_routine)(void *),
+                      void *p_param, uint16_t stack_size, uint16_t priority)
+{
+	int result;
+
+dbg("%s create getpid: %d\n", p_name, getpid());
+
+	pthread_t thread_info;
+	pthread_attr_t attr;
+	int res = 0;
+
+	res = pthread_attr_init(&attr);
+	if (res != 0) {
+		dbg("Failed to pthread_attr_init\n");
+		return -1;
+	}
+	stack_size = stack_size * sizeof(uint32_t);
+	dbg("stack_size: %d\n", stack_size);
+
+	res = pthread_attr_setstacksize(&attr, stack_size);
+	if (res != 0) {
+		dbg("Failed to pthread_attr_setstacksize\n");
+		goto CREATE_FAIL;
+	}
+
+	priority = priority + 100;
+	if (priority > 255)
+		priority = 100;
+
+	struct sched_param prio;
+	prio.sched_priority = priority;
+	dbg("priority: %d\n", priority);
+
+	res = pthread_attr_setschedparam(&attr, &prio);
+	if (res != 0) {
+		dbg("Failed to pthread_attr_setschedparam\n");
+		goto CREATE_FAIL;
+	}
+
+dbg("pthread_create\n");
+	res = pthread_create(&thread_info, &attr, (pthread_startroutine_t)p_routine, p_param);
+	if (res < 0) {
+		dbg("Failed to pthread_create\n");
+		goto CREATE_FAIL;
+	}
+
+	pthread_setname_np(thread_info, p_name);
+dbg("pthread_setname_np\n");
+	pthread_t *thread_info_new = malloc(sizeof(pthread_t));
+	memcpy(thread_info_new, &thread_info, sizeof(pthread_t));
+	pp_handle = (thread_info_new);
+
+dbg("pthread_detach\n");
+	//pthread_detach(*thread_info);
+	return 0;
+
+CREATE_FAIL:
+	dbg("%s create fail\n", p_name);
+	pthread_attr_destroy(&attr);
+	return -1;
+}
+
 #ifdef CONFIG_BUILD_KERNEL
 int main(int argc, FAR char *argv[])
 #else
 int hello_main(int argc, char *argv[])
 #endif
 {
+	void *task_poninter_local;
+	uint8_t pass_param[2];
+
 	printf("Hello, World!!\n");
+
+	pass_param[0] = 0xFF;
+	pass_param[1] = 0xEE;
+	hello_task_create(task_poninter_local, "Temporary_Task", hello_task, pass_param, 1024, 5);
+	printf("hello_task_create Done!!\n");
+
 	return 0;
 }
