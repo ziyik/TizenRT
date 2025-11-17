@@ -57,16 +57,40 @@
 #include <tinyara/config.h>
 #include <stdio.h>
 
+#include <fcntl.h>
+#include <errno.h>
+#define PM_DRVPATH  "/dev/pm"
+#include <sys/types.h>
+#include <sys/ioctl.h>
+#include <tinyara/fs/ioctl.h>
+
 /****************************************************************************
  * hello_main
  ****************************************************************************/
 
+int cnt = 0;
 #ifdef CONFIG_BUILD_KERNEL
 int main(int argc, FAR char *argv[])
 #else
 int hello_main(int argc, char *argv[])
 #endif
 {
-	printf("Hello, World!!\n");
-	return 0;
+  pthread_t tx_tid, rx_tid, pm_tid;
+  pthread_addr_t retval;
+ if(cnt == 1){
+	 int fd = open(PM_DRVPATH, O_WRONLY);
+	 if (fd < 0) {
+		 printf("Fail to open pm start(errno %d)", get_errno());
+		 // return -1;
+	 }
+	 if(ioctl(fd, PMIOC_START, 0) < 0) {
+		 printf("Fail to pm start(errno %d)\n", get_errno());
+		 close(fd);
+		 // return -1;
+	 }
+	 close(fd);
+ }
+ 
+ cnt++;
+ return 0;
 }

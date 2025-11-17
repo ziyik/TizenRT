@@ -66,8 +66,40 @@ static void ble_scan_state_changed_cb(ble_scan_state_e scan_state)
 	return;
 }
 
+#if 0
 /* These values can be modified as a developer wants. */
 static uint8_t ble_filter[] = { 0x02, 0x01, 0x05, 0x03, 0x19, 0x80, 0x01, 0x05, 0x03, 0x12, 0x18, 0x0f, 0x18 };
+static uint8_t ble_filter[] = { 0x02, 0x01, 0x05,
+								0x03, 0x03, 0x0A, 0xA0,
+								0x0F, 0x09, 0x42, 0x4C, 0x45, 0x5F, 0x50, 0x45, 0x52, 0x49, 0x50, 0x48, 0x45, 0x52, 0x41, 0x4C,
+								0x03, 0x19, 0x00, 0x00 };
+
+static uint8_t ble_filter[] =
+{
+    0x03,                             /* length */
+    0x19,            /* type="Appearance" */
+    0,
+    0,
+};
+#else
+static uint8_t ble_filter[] =
+{
+    /* Flags */
+    0x02,             /* length */
+    0x01, /* type="Flags" */
+    0x05,
+    /* Service */
+    0x03,             /* length */
+    0x03,
+    0x0A,
+    0xA0,
+    /* Local name */
+    0x0F,             /* length */
+    0x09,
+    'B', 'L', 'E', '_', 'P', 'E', 'R', 'I', 'P', 'H', 'E', 'R', 'A', 'L',
+};
+
+#endif
 
 static uint8_t g_adv_raw[] = { 
 	0x02, 0x01, 0x04, 0x03, 0x19, 0x80, 0x01, 0x05, 0x03, 0x12, 0x18, 0x0f, 0x17
@@ -86,7 +118,10 @@ static uint8_t g_adv_resp_2[] = {
 uint8_t own_addr_val[BLE_BD_ADDR_MAX_LEN] = {0x11,0x22,0x33,0x44,0x55,0x66};   
 uint8_t own_addr_val_1[BLE_BD_ADDR_MAX_LEN] = {0x22,0x22,0x33,0x44,0x55,0x66};   
 uint8_t own_addr_val_2[BLE_BD_ADDR_MAX_LEN] = {0x33,0x22,0x33,0x44,0x55,0x66};   
- 
+uint8_t own_addr_val_3[BLE_BD_ADDR_MAX_LEN] = {0x44,0x22,0x33,0x44,0x55,0x66};   
+uint8_t own_addr_val_4[BLE_BD_ADDR_MAX_LEN] = {0x55,0x22,0x33,0x44,0x55,0x66};   
+uint8_t own_addr_val_5[BLE_BD_ADDR_MAX_LEN] = {0x66,0x22,0x33,0x44,0x55,0x66};   
+
 uint8_t def_ext_adv_data[] = {       
 	// Flags       
 	0x02,       
@@ -154,17 +189,58 @@ uint8_t def_ext_resp_data_2[] = {
 };
 
 
+static int adv_cnt = 0;
+static int resp_cnt = 0;
+static int not_your = 0;
 
 static void ble_device_scanned_cb_for_test(ble_scanned_device *scanned_device)
 {
-	RMC_LOG(RMC_CLIENT_TAG, "scanned mac : %02x:%02x:%02x:%02x:%02x:%02x\n", 
-		scanned_device->addr.mac[0],
-		scanned_device->addr.mac[1],
-		scanned_device->addr.mac[2],
-		scanned_device->addr.mac[3],
-		scanned_device->addr.mac[4],
-		scanned_device->addr.mac[5]
-	);
+	if(scanned_device->addr.mac[0] == 0x66 && 
+		scanned_device->addr.mac[1] == 0x55 &&     
+		scanned_device->addr.mac[2] == 0x44 &&     
+		scanned_device->addr.mac[3] == 0x77 &&     
+		scanned_device->addr.mac[4] == 0x88 &&
+		scanned_device->addr.mac[5] == 0x99) {	
+	// for product 
+	// if(scanned_device->addr.mac[0] == 0x9c && 
+	// 	scanned_device->addr.mac[1] == 0x44 &&     
+	// 	scanned_device->addr.mac[2] == 0x3d &&     
+	// 	scanned_device->addr.mac[3] == 0x5b &&     
+	// 	scanned_device->addr.mac[4] == 0x75 &&
+	// 	scanned_device->addr.mac[5] == 0x87) {
+		
+		if (scanned_device->adv_type==19) {
+			adv_cnt++;
+		} else if (scanned_device->adv_type==27){
+			resp_cnt++;
+		}
+		if (scanned_device->adv_type==0) {
+			adv_cnt++;
+		} if (scanned_device->adv_type==4){
+			resp_cnt++;
+		}
+		RMC_LOG(RMC_CLIENT_TAG, "scanned mac : %02x:%02x:%02x:%02x:%02x:%02x type %d rssi %d\n",   
+			scanned_device->addr.mac[0],  
+			scanned_device->addr.mac[1],  
+			scanned_device->addr.mac[2],  
+			scanned_device->addr.mac[3],  
+			scanned_device->addr.mac[4],  
+			scanned_device->addr.mac[5], scanned_device->adv_type, scanned_device->rssi);
+			printf("[######## %s : %d] adv_cnt %d resp_cnt %d\n", __FUNCTION__, __LINE__, adv_cnt, resp_cnt);
+			printf("[######## %s : %d] not_your %d\n", __FUNCTION__, __LINE__, not_your);
+			
+	} else {
+		not_your++;
+		return;
+		printf("[######## %s : %d] Not your device!!\n", __FUNCTION__, __LINE__);
+		RMC_LOG(RMC_CLIENT_TAG, "scanned mac : %02x:%02x:%02x:%02x:%02x:%02x type %d rssi %d\n",   
+			scanned_device->addr.mac[0],  
+			scanned_device->addr.mac[1],  
+			scanned_device->addr.mac[2],  
+			scanned_device->addr.mac[3],  
+			scanned_device->addr.mac[4],  
+			scanned_device->addr.mac[5], scanned_device->adv_type, scanned_device->rssi);
+	}
 }
 
 static void ble_device_scanned_cb_for_connect(ble_scanned_device *scanned_device)
@@ -826,7 +902,16 @@ int ble_rmc_main(int argc, char *argv[])
 	* TASH>> ble_rmc scan
 	*/
 	if (strncmp(argv[1], "scan", 5) == 0) {
-		if (argc >= 3 && strncmp(argv[2], "1", 2) == 0) {
+		if (argc >= 5 && strncmp(argv[2], "set", 4) == 0) {
+			uint16_t scan_interval = atoi(argv[3]); 
+			uint16_t scan_window = atoi(argv[4]); 
+			uint8_t scan_type = 1; 
+			ret = ble_client_set_scan(scan_interval, scan_window, scan_type);
+			if (ret != BLE_MANAGER_SUCCESS) {  
+				RMC_LOG(RMC_CLIENT_TAG, "scan start fail[%d]\n", ret);
+				goto ble_rmc_done;	
+			} 
+		} else if (argc >= 3 && strncmp(argv[2], "1", 2) == 0) {
 			RMC_LOG(RMC_CLIENT_TAG, "Scan Start without filter !\n");
 			scan_config.device_scanned_cb = ble_device_scanned_cb_for_test;
 			ret = ble_client_start_scan(NULL, &scan_config);
@@ -838,14 +923,16 @@ int ble_rmc_main(int argc, char *argv[])
 		} else if (argc >= 3 && strncmp(argv[2], "2", 2) == 0) {
 			RMC_LOG(RMC_CLIENT_TAG, "Scan Start with WhiteList!\n");
 
-			uint32_t scan_time = 5; // Seconds
+			uint32_t scan_time = 10; // Seconds
+			adv_cnt = 0;
+			resp_cnt = 0;
 			if (argc == 4) {
 				set_scan_timer(&scan_time, argv[3]);
 			}
 			RMC_LOG(RMC_CLIENT_TAG, "Timer : %us\n", scan_time);
 
 			ble_scan_filter filter = { 0, };
-			set_scan_filter(&filter, NULL, 0, true, scan_time * 1000);
+			set_scan_filter(&filter, NULL, 0, false, scan_time * 1000);
 			scan_config.device_scanned_cb = ble_device_scanned_cb_for_test;
 			ret = ble_client_start_scan(&filter, &scan_config);
 
@@ -862,6 +949,8 @@ int ble_rmc_main(int argc, char *argv[])
 			}
 			RMC_LOG(RMC_CLIENT_TAG, "Timer : %us\n", scan_time);
 
+			RMC_LOG(RMC_CLIENT_TAG, "Set Packet Filter!\n");
+			RMC_LOG(RMC_CLIENT_TAG, "ble_filter size : %d\n", sizeof(ble_filter));
 			ble_scan_filter filter = { 0, };
 			set_scan_filter(&filter, ble_filter, sizeof(ble_filter), false, scan_time * 1000);
 			scan_config.device_scanned_cb = ble_device_scanned_cb_for_test;
@@ -1145,28 +1234,22 @@ int ble_rmc_main(int argc, char *argv[])
 			}
 //			uint8_t adv_event_prop = 0x1;//extended adv   
 			uint8_t adv_event_prop = 0x13;//legacy adv   
-			uint32_t adv_interval_int[2] = {32,32};
+			uint32_t adv_interval_int[2] = {(32 + adv_handle * 10), (32 + adv_handle* 10)};
 			uint8_t own_addr_type = 1;
  			int16_t val = 0x7f;
-			if (adv_handle == 0){
-				ret = ble_server_create_multi_adv(adv_event_prop,
-												 adv_interval_int,
-												 own_addr_type,
-												 own_addr_val,
-												 &adv_handle);
-			} else if  (adv_handle == 1) { 
-				ret = ble_server_create_multi_adv(adv_event_prop,
-												 adv_interval_int,
-												 own_addr_type,
-												 own_addr_val_1,
-												 &adv_handle);
-			} else if  (adv_handle == 2) {
-				ret = ble_server_create_multi_adv(adv_event_prop,
-												 adv_interval_int,
-												 own_addr_type,
-												 own_addr_val_2,
-												 &adv_handle);
-			}
+			RMC_LOG(RMC_SERVER_TAG, "adv_interval_int = [%d]\n", adv_interval_int[2]);
+
+			own_addr_val[0] = 0x11 + adv_handle * (0x11);
+			RMC_LOG(RMC_SERVER_TAG, "adv_handle = [%d]\n", adv_handle);
+			RMC_LOG(RMC_SERVER_TAG, "own_addr_val[0] = [%x]\n", own_addr_val[0]);
+			if (adv_handle > 2)
+				adv_event_prop = 0x10;
+			RMC_LOG(RMC_SERVER_TAG, "adv_event_prop = [%d]\n", adv_event_prop);
+			ret = ble_server_create_multi_adv(adv_event_prop,
+												adv_interval_int,
+												own_addr_type,
+												own_addr_val,
+												&adv_handle);
 
 			if (ret != BLE_MANAGER_SUCCESS) {
 				RMC_LOG(RMC_SERVER_TAG, "Fail to create adv [%d]\n", ret);
@@ -1202,16 +1285,12 @@ int ble_rmc_main(int argc, char *argv[])
 				RMC_LOG(RMC_SERVER_TAG, "Wrong argument\n");
 				goto ble_rmc_done;
 			}
-			if (adv_handle == 0) {
-				ret = ble_server_set_multi_adv_data(adv_handle, adv_data_len, def_ext_adv_data);
-				ret = ble_server_set_multi_resp_data(adv_handle, adv_data_len, def_ext_resp_data);
-			} else if (adv_handle == 1) {
-				ret = ble_server_set_multi_adv_data(adv_handle, adv_data_len, def_ext_adv_data_1);
-				ret = ble_server_set_multi_resp_data(adv_handle, adv_data_len, def_ext_resp_data_1);
-			} else if (adv_handle == 2) {
-				ret = ble_server_set_multi_adv_data(adv_handle, adv_data_len, def_ext_adv_data_2);
-				ret = ble_server_set_multi_resp_data(adv_handle, adv_data_len, def_ext_resp_data_2);
-			}
+			def_ext_adv_data[5] = '0' + adv_handle;
+			def_ext_resp_data[9] = '0' + adv_handle;
+			RMC_LOG(RMC_SERVER_TAG, "def_ext_adv_data[5] = [%d]\n", def_ext_adv_data[5]);
+			RMC_LOG(RMC_SERVER_TAG, "def_ext_resp_data[9] = [%d]\n", def_ext_resp_data[9]);
+			ret = ble_server_set_multi_adv_data(adv_handle, adv_data_len, def_ext_adv_data);
+			ret = ble_server_set_multi_resp_data(adv_handle, adv_data_len, def_ext_resp_data);
 			if (ret != BLE_MANAGER_SUCCESS) {   
 				RMC_LOG(RMC_SERVER_TAG, "Fail to set adv data [%d]\n", ret);
 				goto ble_rmc_done;

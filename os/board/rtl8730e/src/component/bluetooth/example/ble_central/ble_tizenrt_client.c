@@ -209,7 +209,7 @@ trble_result_e rtw_ble_client_start_scan_with_filter(trble_scan_filter* scan_par
     {
         return TRBLE_FAIL;
     }
-
+dbg("Start !! \n");
     rtk_bt_le_gap_dev_state_t new_state;
     if(RTK_BT_OK != rtk_bt_le_gap_get_dev_state(&new_state))
     {
@@ -226,6 +226,10 @@ trble_result_e rtw_ble_client_start_scan_with_filter(trble_scan_filter* scan_par
 		scan_info.enable = true;
 		scan_info.p_filter = scan_parm->raw_data;
 		scan_info.offset = 0;
+dbg("scan_parm->raw_data !! \n");
+for(uint16_t i = 0; i < scan_parm->raw_data_length; i++) {
+	dbg("0x%02x \n", scan_info.p_filter[i]);
+}
         if(RTK_BT_OK != rtk_bt_le_gap_scan_info_filter(&scan_info))
         {
             dbg("set scan info fail !! \n");

@@ -17,9 +17,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+sss
 #define GAP_MAX_LINKS                       4
-#define GAP_MAX_EXT_ADV_SETS                6
+#define GAP_MAX_EXT_ADV_SETS                7
 #define GAP_MAX_PA_ADV_SETS                 3
 #define GAP_MAX_PA_SYNC_HANDLES             3
 #define GAP_MAX_ECFC_PROTOCAL_NUM           6

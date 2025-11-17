@@ -691,6 +691,9 @@ uint8_t hci_platform_init(void)
 		hci_platform_bt_fw_log_open();
 		HCI_INFO("FW LOG OPEN");
 #if 0
+		dbg("FW LOG OPEN\n");
+		dbg("FW LOG OPEN\n");
+		dbg("FW LOG OPEN\n");
 		Pinmux_Config(_PB_10, PINMUX_FUNCTION_UART_RTSCTS);
 		PAD_PullCtrl(_PB_10, GPIO_PuPd_UP);
 #endif

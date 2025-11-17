@@ -21,7 +21,7 @@ extern "C" {
 #if defined(CONFIG_PLATFORM_8721D) || defined(CONFIG_PLATFORM_AMEBAD2)      \
     || defined(CONFIG_PLATFORM_8735B) || defined(CONFIG_PLATFORM_AMEBALITE)
 #define GAP_MAX_LINKS                       4
-#define GAP_MAX_EXT_ADV_SETS                6
+#define GAP_MAX_EXT_ADV_SETS                10
 #define LE_AUDIO_MAX_EXT_ADV_SETS           1
 #define GAP_MAX_PA_ADV_SETS                 3
 #define GAP_MAX_PA_SYNC_HANDLES             3
