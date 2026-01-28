@@ -570,6 +570,137 @@ bool hexdata_str_to_bd_addr(char *str, uint8_t *addr_buf, uint8_t buf_len)
 	return true;
 }
 
+ble_addr test_conn_addr_info = { 0, };
+ble_addr test_scan_addr_info = { 0, };
+uint8_t test_started = 0;
+uint8_t test_device_role = 0;
+uint8_t test_reconn_act = 0;
+uint8_t test_pairing_act = 0;
+static void *ble_connect_thread(void *data)
+{
+	ble_result_e ret = BLE_MANAGER_FAIL;
+	ble_client_ctx *ctx = NULL;
+
+	RMC_LOG(RMC_TAG, "- BLE Connect Thread-\n");
+
+	// create ctx
+	ctx = ble_client_create_ctx(&client_config);
+	if (ctx == NULL) {
+		RMC_LOG(RMC_CLIENT_TAG, "create ctx fail\n");
+		goto ble_conn_fail;
+	}
+
+	while(1) {
+		usleep(30000);
+		RMC_LOG(RMC_CLIENT_TAG, "Try to connect every 3s!");
+		RMC_LOG(RMC_CLIENT_TAG, "Address: [%02x:%02x:%02x:%02x:%02x:%02x]\n",
+			test_conn_addr_info.mac[0], test_conn_addr_info.mac[1], test_conn_addr_info.mac[2], test_conn_addr_info.mac[3], test_conn_addr_info.mac[4], test_conn_addr_info.mac[5]);
+
+		/* Try to connect with auto reconnect setting */
+		ret = ble_connect_common(ctx, &test_conn_addr_info, test_reconn_act);
+		RMC_LOG(RMC_CLIENT_TAG, "Connect Result : %d\n", ret);
+		if (ret == 0) {
+			RMC_LOG(RMC_CLIENT_TAG, "Connect Success [ID : %d]\n", ctx_count);
+			ctx_list[ctx_count++] = ctx;
+			break;
+		} else {
+			goto ble_conn_fail;
+		}
+	}
+
+ble_conn_done:
+		/* Once success, auto reconnect will take care of the connection */
+		RMC_LOG(RMC_TAG, "- BLE Connect Thread Done! -\n");
+		return;
+
+ble_conn_fail:
+		RMC_LOG(RMC_TAG, "- BLE Connect Thread Fail! -\n");
+}
+
+static void *ble_dut_test_thread(void *data)
+{
+	ble_result_e ret = BLE_MANAGER_FAIL;
+
+	usleep(3000);
+	RMC_LOG(RMC_TAG, "- BLE DUT Thread-\n");
+
+	/* DUT, has 2 roles: Master and Slave */
+	/* Master:	Connect and pair with test_conn_addr_info */
+	/* 			Stay connected and keep seding data randomly */
+	pthread_t pid;
+	if (!test_started) {
+		/* Create multi Adv pthread */
+		if ((ret = pthread_create(&pid, NULL, (pthread_startroutine_t)ble_connect_thread, NULL)) != 0) {
+			RMC_LOG(RMC_CLIENT_TAG, "pthread_create failed, status=%d\n", ret);
+			goto ble_dut_done;
+		} else {
+			pthread_detach(pid);
+		}
+	}
+
+	/* Slave:	Connected by peer device, and continue adv even connected */
+	/* 			Stay connected and seding data randomly */
+	/* 			Disconnect at random time, and get reconnected again */
+
+ble_dut_done:
+	RMC_LOG(RMC_TAG, "- BLE DUT Thread Error!! -\n");
+}
+
+static void *ble_sut_test_thread(void *data)
+{
+	ble_result_e ret = BLE_MANAGER_FAIL;
+
+	usleep(3000);
+	RMC_LOG(RMC_TAG, "- BLE SUT Thread-\n");
+
+	/* DUT, has 2 roles: Master and Slave */
+	/* Slave:	Start 1 Adv, connected by Master device */
+	/* 			Stay connected and receive data from Master */
+	uint32_t adv_interval_int[2] = { 192, 192 };	/* Interval 120ms */
+	uint8_t adv_event_prop = 0x13;					//LE_EXT_ADV_LEGACY_ADV_CONN_SCAN_UNDIRECTED
+	uint8_t adv_addr_type = 1;						//RTK_BT_LE_ADDR_TYPE_RANDOM
+	uint8_t adv_addr[BLE_BD_ADDR_MAX_LEN] = { 0 };
+	uint8_t adv_handle = 0;
+
+	ret = ble_manager_get_mac_addr(adv_addr);		/* Use own MAC address as Adv address */
+	if (ret != BLE_MANAGER_SUCCESS) {
+		RMC_LOG(RMC_SERVER_TAG, "Get MAC fail[%d]\n", ret);
+		goto ble_sut_done;
+	}
+	RMC_LOG(RMC_SERVER_TAG, "adv_handle = [%d]\n", adv_handle);
+	RMC_LOG(RMC_SERVER_TAG, "adv_interval_int = [%d]\n", adv_interval_int[0]);
+	ret = ble_server_create_multi_adv(adv_event_prop, adv_interval_int, adv_addr_type, adv_addr, &adv_handle);
+	RMC_LOG(RMC_SERVER_TAG, "Create adv [%d]\n", ret);
+	ret = ble_server_set_multi_adv_data(adv_handle, sizeof(def_ext_adv_data), def_ext_adv_data);
+	RMC_LOG(RMC_SERVER_TAG, "Set adv data [%d]\n", ret);
+	ret = ble_server_set_multi_resp_data(adv_handle, sizeof(def_ext_adv_data), def_ext_adv_data);
+	RMC_LOG(RMC_SERVER_TAG, "Set resp data [%d]\n", ret);
+	ret = ble_server_start_multi_adv(adv_handle);
+	if (ret != BLE_MANAGER_SUCCESS) {
+		RMC_LOG(RMC_SERVER_TAG, "Fail to start adv [%d]\n", ret);
+		goto ble_sut_done;
+	}
+
+	/* Master:	Connect with test_conn_addr_info */
+	/* 			Stay connected and keep seding data randomly */
+	/* 			Will get disconnected randomly, reconnect */
+	/* 			Scan for test_scan_addr_info address adv */
+	pthread_t pid;
+	if (!test_started) {
+		/* Create multi Adv pthread */
+		if ((ret = pthread_create(&pid, NULL, (pthread_startroutine_t)ble_connect_thread, NULL)) != 0) {
+			RMC_LOG(RMC_CLIENT_TAG, "pthread_create failed, status=%d\n", ret);
+			goto ble_sut_done;
+		} else {
+			pthread_detach(pid);
+		}
+	}
+
+ble_sut_done:
+	RMC_LOG(RMC_TAG, "- BLE SUT Thread Error!! -\n");
+}
+
+
 /****************************************************************************
  * ble_rmc_main
  ****************************************************************************/
@@ -737,7 +868,7 @@ int ble_rmc_main(int argc, char *argv[])
 
 		ret = ble_manager_get_mac_addr(mac);
 		if (ret != BLE_MANAGER_SUCCESS) {
-			RMC_LOG(RMC_CLIENT_TAG, "get mac fail[%d]\n", ret);
+			RMC_LOG(RMC_CLIENT_TAG, "Get MAC address fail[%d]\n", ret);
 			goto ble_rmc_done;
 		}
 
@@ -827,7 +958,16 @@ int ble_rmc_main(int argc, char *argv[])
 	* TASH>> ble_rmc scan
 	*/
 	if (strncmp(argv[1], "scan", 5) == 0) {
-		if (argc >= 3 && strncmp(argv[2], "1", 2) == 0) {
+		if (argc >= 5 && strncmp(argv[2], "set", 4) == 0) {
+			uint16_t scan_interval = atoi(argv[3]);
+			uint16_t scan_window = atoi(argv[4]);
+			ret = ble_client_set_scan(scan_interval, scan_window, 1);
+			if (ret != BLE_MANAGER_SUCCESS) {
+				RMC_LOG(RMC_CLIENT_TAG, "scan start fail[%d]\n", ret);
+				goto ble_rmc_done;
+			}
+			RMC_LOG(RMC_CLIENT_TAG, "Set Scan interval: %d, Scan window: %d. (Value * 0.625 ms)\n", scan_interval, scan_window);
+		} else if (argc >= 3 && strncmp(argv[2], "1", 2) == 0) {
 			RMC_LOG(RMC_CLIENT_TAG, "Scan Start without filter !\n");
 			scan_config.device_scanned_cb = ble_device_scanned_cb_for_test;
 			ret = ble_client_start_scan(NULL, &scan_config);
@@ -940,7 +1080,7 @@ int ble_rmc_main(int argc, char *argv[])
 			goto ble_rmc_done;
 		}
 
-		if (argc == 3 && strncmp(argv[2], "r", 2) == 0) {
+		if (argc == 4 && strncmp(argv[3], "r", 2) == 0) {
 			addr_info.type = BLE_ADDR_TYPE_RANDOM_STATIC;
 		} else {
 			addr_info.type = BLE_ADDR_TYPE_PUBLIC;			/* Default connect to public */
@@ -949,8 +1089,9 @@ int ble_rmc_main(int argc, char *argv[])
 			addr_info.mac[0], addr_info.mac[1], addr_info.mac[2], addr_info.mac[3], addr_info.mac[4], addr_info.mac[5]);
 		RMC_LOG(RMC_CLIENT_TAG, "Address type : %d\n", addr_info.type);
 
-		if (argc == 3 && strncmp(argv[2], "auto", 5) == 0) {
+		if (argc == 5 && strncmp(argv[4], "auto", 5) == 0) {
 			/* For initial connection, remove bonded data all */
+			RMC_LOG(RMC_CLIENT_TAG, "Enable auto reconnect\n");
 			ret = ble_connect_common(ctx, &addr_info, true);
 		} else {
 			ret = ble_connect_common(ctx, &addr_info, false);
@@ -962,30 +1103,30 @@ int ble_rmc_main(int argc, char *argv[])
 		}
 	}
 
-	//connection parameter update, use this when AI-Lite is slave
-	if (strncmp(argv[1], "updates", 8) == 0) {
-		ble_conn_handle conn_handle = 24;
+	/* Connection parameter update */
+	if (strncmp(argv[1], "update", 8) == 0) {
+		if (argc < 7) {
+			RMC_LOG(RMC_CLIENT_TAG, "Error: Missing parameter, fail!!\n");
+		}
+		ble_conn_handle conn_handle = atoi(argv[3]);
+		uint16_t conn_interval = atoi(argv[4]);
+		uint16_t slave_latency = atoi(argv[5]);
+		uint16_t supervision_timeout = atoi(argv[6]);
 		ble_conn_param conn_param;
-		conn_param.min_conn_interval = 0x0010;
-		conn_param.max_conn_interval = 0x0010;
-		conn_param.slave_latency = 2;
-		conn_param.supervision_timeout = 0x00aa;
+
+		conn_param.min_conn_interval = conn_interval;
+		conn_param.max_conn_interval = conn_interval;
+		conn_param.slave_latency = slave_latency;
+		conn_param.supervision_timeout = supervision_timeout;
 		conn_param.role = BLE_SLAVE_CONN_PARAM_UPDATE;
 
-		ble_manager_conn_param_update(&conn_handle, &conn_param);
-	}
-
-	//connection parameter update, use this when TPdual is master
-	if (strncmp(argv[1], "updatem", 8) == 0) {
-		ble_conn_handle conn_handle = 16;
-		ble_conn_param conn_param;
-		conn_param.min_conn_interval = 0x0010;
-		conn_param.max_conn_interval = 0x0010;
-		conn_param.slave_latency = 2;
-		conn_param.supervision_timeout = 0x00aa;
-		conn_param.role = BLE_SLAVE_CONN_PARAM_UPDATE;
-
-		ble_manager_conn_param_update(&conn_handle, &conn_param);
+		ret = ble_manager_conn_param_update(&conn_handle, &conn_param);
+		if (ret != BLE_MANAGER_SUCCESS) {
+			RMC_LOG(RMC_CLIENT_TAG, "Connection param update fail[%d]\n", ret);
+			goto ble_rmc_done;
+		}
+		RMC_LOG(RMC_CLIENT_TAG, "conn_handle: %d. Set Connection interval: %d\n", conn_handle, conn_interval);
+		RMC_LOG(RMC_CLIENT_TAG, "Slave latency: %d. Supervision timeout: %d\n", slave_latency, supervision_timeout);
 	}
 
 	if (strncmp(argv[1], "advon", 6) == 0) {
@@ -1031,7 +1172,7 @@ int ble_rmc_main(int argc, char *argv[])
 		}
 		/* Create multi Adv pthread */
 		if ((ret = pthread_create(&pid, NULL, (pthread_startroutine_t)multi_adv_thread, (void*)&max_count)) != 0) {
-			printf("%s: pthread_create failed, status=%d\n", __func__, ret);
+			RMC_LOG(RMC_SERVER_TAG, "pthread_create failed, status=%d\n", ret);
 		} else {
 			pthread_detach(pid);
 		}
@@ -1414,7 +1555,79 @@ int ble_rmc_main(int argc, char *argv[])
 		}
 	}
 
+	/* 
+	* arg[1] = "test"				>> Test command
+	* arg[2] = "dut/sut" or "scan"	>> DUT or SUT device or scan operation
+	* arg[3] = "<mac_address>"		>> device that need to connect to
+	* arg[4] = "0/1"				>> Optional, auto reconnect. Default enable.
+	* arg[5] = "0/1"				>> Optional, pairing action. DUT: default enable, SUT: default disable
+	*/
+	if (strncmp(argv[1], "test", 5) == 0) {
+		if (argc < 4) {
+			RMC_LOG(RMC_CLIENT_TAG, "Error: Missing parameter, fail!!\n");
+			goto ble_rmc_done;
+		}
+		if (strncmp(argv[2], "scan", 5) == 0) {
+			hexdata_str_to_bd_addr(argv[3], test_scan_addr_info.mac, 6); 		/* MAC address */
+			test_scan_addr_info.type = BLE_ADDR_TYPE_RANDOM_STATIC;				/* Set as random */
+			goto ble_rmc_done;
+		}
+
+		if (strncmp(argv[2], "DUT", 4) == 0) {
+			test_device_role = 0;									/* DUT */
+			test_pairing_act = 1;
+		} else if (strncmp(argv[2], "SUT", 4) == 0) {
+			test_device_role = 1;									/* SUT */
+			test_pairing_act = 0;
+		} else {
+			RMC_LOG(RMC_CLIENT_TAG, "Error: Invalid parameter!!\n");
+			goto ble_rmc_done;
+		}
+		hexdata_str_to_bd_addr(argv[3], test_conn_addr_info.mac, 6); 			/* MAC address */
+		test_conn_addr_info.type = BLE_ADDR_TYPE_RANDOM_STATIC;					/* Set as random */
+
+		test_reconn_act = 1;
+		if ((argc > 4) && strncmp(argv[4], "0", 2) == 0) {
+			test_reconn_act = 0;									/* Auto reconnect Off */
+		}
+		if ((argc > 5) && strncmp(argv[5], "0", 2) == 0) {
+			test_pairing_act = 0;									/* Pairing action Off */
+		} else if ((argc > 5) && strncmp(argv[5], "1", 2) == 0) {
+			test_pairing_act = 1;									/* Pairing action On */
+		}
+
+		pthread_t pid;
+		if (test_started) {
+			RMC_LOG(RMC_CLIENT_TAG, "Restart test with\n");
+		}
+		if (test_device_role) {
+			RMC_LOG(RMC_CLIENT_TAG, "Test start with SUT\n");
+			if (!test_started) {
+				/* Create multi Adv pthread */
+				if ((ret = pthread_create(&pid, NULL, (pthread_startroutine_t)ble_sut_test_thread, NULL)) != 0) {
+					RMC_LOG(RMC_CLIENT_TAG, "pthread_create failed, status=%d\n", ret);
+				} else {
+					pthread_detach(pid);
+				}
+			}
+		} else {
+			RMC_LOG(RMC_CLIENT_TAG, "Test start with DUT\n");
+			if (!test_started) {
+				/* Create multi Adv pthread */
+				if ((ret = pthread_create(&pid, NULL, (pthread_startroutine_t)ble_dut_test_thread, NULL)) != 0) {
+					RMC_LOG(RMC_CLIENT_TAG, "pthread_create failed, status=%d\n", ret);
+				} else {
+					pthread_detach(pid);
+				}
+			}
+		}
+		test_started = 1;
+		RMC_LOG(RMC_CLIENT_TAG, "Test start with MAC [%02x:%02x:%02x:%02x:%02x:%02x]\n",
+			test_conn_addr_info.mac[0], test_conn_addr_info.mac[1], test_conn_addr_info.mac[2], test_conn_addr_info.mac[3], test_conn_addr_info.mac[4], test_conn_addr_info.mac[5]);
+		RMC_LOG(RMC_CLIENT_TAG, "Test start with Auto reconnect: %d, Pairing: %d\n", test_reconn_act, test_pairing_act);
+	}
+
 ble_rmc_done:
-	RMC_LOG(RMC_CLIENT_TAG, "done\n");
+	RMC_LOG(RMC_TAG, "done\n");
 	return 0;
 }
