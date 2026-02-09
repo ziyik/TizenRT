@@ -159,13 +159,15 @@ static ble_result_e ble_remove_ctx(ble_client_ctx *ctx)
 ble_addr test_conn_addr_info = { 0, };
 uint8_t test_scan_address[BLE_BD_ADDR_MAX_LEN] = { 0, };
 uint8_t test_started = 0;
+uint8_t test_retry_count = 0;
 uint8_t test_connecting = 0;
 uint8_t test_reconn_act = 0;
 uint8_t test_pairing_act = 0;
-uint8_t test_scanning = BLE_SCAN_STOPPED;
-uint16_t test_scanned_count = 0;
-uint16_t test_scan_round_count = 0;
 uint8_t test_recv_gatt_counter = 0;
+uint8_t test_scanning = BLE_SCAN_STOPPED;
+uint8_t test_scan_round_count = 0;
+uint16_t test_scanned_count = 0;
+
 
 static void ble_test_scan_state_changed_cb(ble_scan_state_e scan_state)
 {
@@ -661,6 +663,7 @@ ble_sut_check:
 			RMC_LOG(RMC_SERVER_TAG, "Fail to get connection status[%d]\n", ret);
 		}
 	}
+	test_retry_count = 0;
 	RMC_LOG(RMC_SERVER_TAG, "- SUT connected -\n");
 
 	/* Server role keep the connection and sending data candomly*/
@@ -682,6 +685,7 @@ ble_sut_check:
 		}
 		ret = ble_server_charact_notify(BLE_TEST_NOTI_COMMAND, BLE_TEST_SUT_HANDLE, &packet);	/* Server Role, always 24 */
 		if (ret != BLE_MANAGER_SUCCESS) {
+			test_retry_count++;
 			RMC_LOG(RMC_ERROR_TAG, "Error!! Fail to send Notify[%d]!!\n", ret);
 		}
 
@@ -689,11 +693,21 @@ ble_sut_check:
 		sleep(random_send);										/* Delay randamly */
 		ret = ble_server_charact_indicate(BLE_TEST_INDI_COMMAND, BLE_TEST_SUT_HANDLE, &packet);	/* Server Role, always 24 */
 		if (ret != BLE_MANAGER_SUCCESS) {
+			test_retry_count++;
 			RMC_LOG(RMC_ERROR_TAG, "Error!! Fail to send Notify[%d]!!\n", ret);
 		}
 		gatt_counter++;
 		send_data[3] = gatt_counter;							/* Keep increase the last byte */
+
+		if (test_retry_count > 10) {							/* Retry too many time */
+			break;
+		}
 	}
+
+	ret = ble_server_disconnect(BLE_TEST_SUT_HANDLE);			/* Force disconnect */
+	RMC_LOG(RMC_CLIENT_TAG, "Disconnect [%d]\n", ret);
+	ble_start_adv0();											/* Restart Adv */
+	goto ble_sut_check;
 
 ble_sut_done:
 	RMC_LOG(RMC_TAG, "RMC_ERROR_TAG!! BLE SUT Thread Error!!\n");
