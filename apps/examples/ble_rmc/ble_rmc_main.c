@@ -37,11 +37,20 @@
 #define RMC_LOG(tag, fmt, args...) printf(tag fmt, ##args)
 #define RMC_MAX_CONNECTION 3
 
+typedef struct {
+	ble_conn_handle conn_handle;
+	uint16_t loop;
+	uint16_t delay;
+	uint16_t command;
+	uint8_t data_len;
+} ble_data_loop;
+
 static int g_scan_done = 0;
 static int g_scan_state = -1;
 static ble_addr g_target = { 0, };
 static ble_client_ctx *ctx_list[RMC_MAX_CONNECTION] = { 0, };
 static int ctx_count = 0;
+static uint8_t ble_end_loop = 0;
 
 static char *client_state_str[] = {
 	"\x1b[35mNONE\x1b[0m",
@@ -73,26 +82,26 @@ const uint8_t def_ext_addr_val[BLE_BD_ADDR_MAX_LEN] = { 0x11, 0x22, 0x33, 0x44, 
 
 const uint8_t def_ext_adv_data[] = {
 	0x02,			// Flags
-	0x01,			// RTK_BT_LE_GAP_ADTYPE_FLAGS,
-	0x01 | 0x04,	// RTK_BT_LE_GAP_ADTYPE_FLAGS_LIMITED | RTK_BT_LE_GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED,
+	0x01,			// RTK_BT_LE_GAP_ADTYPE_FLAGS
+	0x01 | 0x04,	// RTK_BT_LE_GAP_ADTYPE_FLAGS_LIMITED | RTK_BT_LE_GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED
 
 	0x12,			// Local name
-	0x09,			// RTK_BT_LE_GAP_ADTYPE_LOCAL_NAME_COMPLETE,
+	0x09,			// RTK_BT_LE_GAP_ADTYPE_LOCAL_NAME_COMPLETE
 	'0', 'E', 'K', '_', 'B', 'T', '_', 'P', 'E', 'R', 'I', 'P', 'H', 'E', 'R', 'A', 'L',
 };
 
 const uint8_t def_ext_resp_data[] = {
 	0x02,			// Flags
-	0x01,			// RTK_BT_LE_GAP_ADTYPE_FLAGS,
-	0x01 | 0x04,	// RTK_BT_LE_GAP_ADTYPE_FLAGS_LIMITED | RTK_BT_LE_GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED,
+	0x01,			// RTK_BT_LE_GAP_ADTYPE_FLAGS
+	0x01 | 0x04,	// RTK_BT_LE_GAP_ADTYPE_FLAGS_LIMITED | RTK_BT_LE_GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED
 
 	0x12,			// Local name
-	0x09,			// RTK_BT_LE_GAP_ADTYPE_LOCAL_NAME_COMPLETE,
+	0x09,			// RTK_BT_LE_GAP_ADTYPE_LOCAL_NAME_COMPLETE
 	'R', 'E', 'S', 'P', '0', '_', '_', 'P', 'E', 'R', 'I', 'P', 'H', 'E', 'R', 'A', 'L',
 };
 
-const static uint8_t local_data[4] = { 0xA1, 0xA2, 0xA3, 0x00};
-static uint8_t coc_data[10] = { 0x67, 1, 2, 3, 4, 5, 6, 7, 0x88 };
+const static uint8_t local_data[] = { 0xA1, 0xA2, 0xA3, 0x00 };
+static uint8_t coc_data[] = { 0x67, 1, 2, 3, 4, 5, 6, 7, 0x88 };
 
 static char *__client_state_str(ble_client_state_e state)
 {
@@ -106,7 +115,7 @@ static ble_result_e ble_add_ctx(ble_client_ctx *ctx)
 		return BLE_MANAGER_OUT_OF_MEMORY;
 	}
 
-	for (int i = 0; i < RMC_MAX_CONNECTION; i++) {
+	for (uint8_t i = 0; i < RMC_MAX_CONNECTION; i++) {
 		if (ctx_list[i] == NULL) {
 			ctx_list[i] = ctx;
 			ctx_count++;
@@ -130,10 +139,10 @@ static ble_client_ctx *ble_find_ctx(ble_conn_handle conn_handle)
 
 static ble_result_e ble_remove_ctx(ble_client_ctx *ctx)
 {
-	if (ctx_count == 0) {								/* Not connected, noting to revmove */
+	if (ctx_count == 0) {								/* Not connected, nothing to remove */
 		return BLE_MANAGER_SUCCESS;
 	}
-	for (int i = 0; i < RMC_MAX_CONNECTION; i++) {
+	for (uint8_t i = 0; i < RMC_MAX_CONNECTION; i++) {
 		if (ctx_list[i] != NULL && ctx_list[i] == ctx) {
 			ctx_list[i] = NULL;
 			ctx_count--;
@@ -143,7 +152,6 @@ static ble_result_e ble_remove_ctx(ble_client_ctx *ctx)
 	RMC_LOG(RMC_ERROR_TAG, "[%s]Error: ctx not found!!!\r\n", __func__);
 	return BLE_MANAGER_FAIL;
 }
-
 
 #define BLE_TEST_NOTI_SERVICE (0xcc00)
 #define BLE_TEST_NOTI_COMMAND (0xcc02)
@@ -168,7 +176,6 @@ uint8_t test_scanning = BLE_SCAN_STOPPED;
 uint8_t test_scan_round_count = 0;
 uint16_t test_scanned_count = 0;
 
-
 static void ble_test_scan_state_changed_cb(ble_scan_state_e scan_state)
 {
 	RMC_LOG(RMC_CLIENT_TAG, "'%s' is called[%d]\n", __FUNCTION__, scan_state);
@@ -182,6 +189,7 @@ static void ble_test_scanned_cb(ble_scanned_device *scanned_device)
 	if (memcmp(scanned_device->addr.mac, test_scan_address, 6) == 0) {
 		test_scanned_count++;
 	}
+	return;
 }
 
 static ble_result_e ble_create_connect_thread(void);
@@ -213,7 +221,7 @@ static void ble_test_device_connected_cb(ble_client_ctx *ctx, ble_device_connect
 static void ble_test_operation_cb(ble_client_ctx *ctx, ble_attr_handle attr_handle, ble_data *read_result)
 {
 	if (read_result->length == sizeof(local_data)) {
-		if(memcmp(read_result->data, local_data, (sizeof(local_data) - 1))) {
+		if (memcmp(read_result->data, local_data, (sizeof(local_data) - 1))) {
 			RMC_LOG(RMC_ERROR_TAG, "Error!! Data mismatch!!\n");
 			RMC_LOG(RMC_ERROR_TAG, "data : %x %x %x %x\n", read_result->data[0], read_result->data[1], read_result->data[2], read_result->data[3]);
 		} else {
@@ -259,10 +267,10 @@ static ble_client_callback_list test_client_config = {
 	ble_test_operation_cb,
 	ble_test_operation_cb,
 	NULL,
-	ble_test_pair_bond_cb
+	ble_test_pair_bond_cb,
 };
 
-void _reverse_mac(uint8_t *mac, uint8_t *target)
+static void _reverse_mac(uint8_t *mac, uint8_t *target)
 {
 	int i;
 	int j;
@@ -284,16 +292,16 @@ static void *ble_scan_result_thread(void *data)
 {
 	ble_result_e ret = BLE_MANAGER_FAIL;
 	RMC_LOG(RMC_CLIENT_TAG, "- BLE Scan Result Thread-\n");
-	RMC_LOG(RMC_CLIENT_TAG, "Start checking sacn result after 1mins\n");
+	RMC_LOG(RMC_CLIENT_TAG, "Start checking scan result after 1mins\n");
 
 ble_restart_scan:
-	while (test_connecting) {											/* While connecting */
-		sleep(5);														/* Wait */
-	}
 	sleep(3);
 
 	ret = ble_client_set_scan(320, 160, 1);								/* scan_interval = 320;, scan_window = 160;, Active scan */
-	RMC_LOG(RMC_CLIENT_TAG, "Scan Start without filter!\n");
+	if (ret != BLE_MANAGER_SUCCESS) {
+		RMC_LOG(RMC_CLIENT_TAG, "Warning!! Scan set fail[%d]\n", ret);
+		goto ble_restart_scan;
+	}
 	memcpy(test_scan_address, def_ext_addr_val, BLE_BD_ADDR_MAX_LEN);	/* Scan target address */
 	ret = ble_client_start_scan(NULL, &test_scan_config);
 	if (ret != BLE_MANAGER_SUCCESS) {
@@ -302,10 +310,12 @@ ble_restart_scan:
 	}
 	test_scan_round_count = 0;
 
-	while(1) {
+	while (1) {
 		sleep(60);														/* Print the scanned result every 1min and reset the count */
 		RMC_LOG(RMC_CLIENT_TAG, "Number of scanned address in 1min is: %d!\n", test_scanned_count);
 		if (test_scanned_count == 0) {
+			RMC_LOG(RMC_ERROR_TAG, "Scanned address [%02x:%02x:%02x:%02x:%02x:%02x]\n", test_scan_address[0], test_scan_address[1],
+					test_scan_address[2], test_scan_address[3], test_scan_address[4], test_scan_address[5]);
 			RMC_LOG(RMC_ERROR_TAG, "Error!! Number of scanned address in 1min is abnormal!!!\n");
 			RMC_LOG(RMC_ERROR_TAG, "Error!! Number of scanned address in 1min is abnormal!!!\n");
 			RMC_LOG(RMC_ERROR_TAG, "Error!! Number of scanned address in 1min is abnormal!!!\n");
@@ -402,7 +412,7 @@ ble_conn_restart:
 	RMC_LOG(RMC_CLIENT_TAG, "Address: [%02x:%02x:%02x:%02x:%02x:%02x]\n",
 		test_conn_addr_info.mac[0], test_conn_addr_info.mac[1], test_conn_addr_info.mac[2], test_conn_addr_info.mac[3], test_conn_addr_info.mac[4], test_conn_addr_info.mac[5]);
 
-	ret = ble_client_set_scan(160, 80, 1);						/* scan_interval = 160;, scan_window = 80;, Active scan */
+	ret = ble_client_set_scan(160, 140, 1);						/* scan_interval = 160;, scan_window = 140;, Active scan */
 	memcpy(test_scan_address, test_conn_addr_info.mac, BLE_BD_ADDR_MAX_LEN);
 	ret = ble_client_start_scan(NULL, &test_scan_config);
 	if (ret != BLE_MANAGER_SUCCESS) {
@@ -420,9 +430,6 @@ ble_conn_restart:
 			}
 			goto ble_conn_restart;
 		}
-		if (test_scanning == 0) {								/* Scan stopped */
-			goto ble_conn_start;								/* To go connet */
-		}
 	}
 
 	ret = ble_client_stop_scan();								/* Stop Scan */
@@ -435,7 +442,7 @@ ble_conn_restart:
 		usleep(500 * 1000);										/* Wait 500ms */
 	}
 
-ble_conn_start:
+
 	ret = ble_test_connect(ctx, &test_conn_addr_info, 0);		/* Try to connect */
 	RMC_LOG(RMC_CLIENT_TAG, "Connect Result : %d\n", ret);
 	if (ret == 0) {
@@ -449,13 +456,14 @@ ble_conn_start:
 	}
 
 	usleep(500 * 1000);											/* Wait 500ms */
-	
+
 	/* Double check connection */
 	bool connection_active;
 	ble_manager_conn_is_active(BLE_TEST_DUT_HANDLE, &connection_active);	/* Client Role, always 16 */
 	RMC_LOG(RMC_CLIENT_TAG, "%d active connection [%d]\n", BLE_TEST_DUT_HANDLE, connection_active);
-	if (!connection_active)
+	if (!connection_active) {
 		goto ble_conn_restart;									/* Retry connection */
+	}
 
 	if (test_pairing_act) {										/* If pairing is enable */
 		ret = ble_manager_start_bond(BLE_TEST_DUT_HANDLE);		/* DUT conn_handle is always 16 */
@@ -493,7 +501,7 @@ static ble_result_e ble_create_connect_thread(void)
 		RMC_LOG(RMC_CLIENT_TAG, "Already trying to connect!!\n");
 		return BLE_MANAGER_ALREADY_WORKING;
 	}
-	
+
 	test_connecting = 1;
 	if ((ret = pthread_create(&pid, NULL, (pthread_startroutine_t)ble_connect_thread, NULL)) != 0) {
 		RMC_LOG(RMC_CLIENT_TAG, "pthread_create failed, status=%d\n", ret);
@@ -592,9 +600,12 @@ static void *ble_dut_test_thread(void *data)
 	RMC_LOG(RMC_CLIENT_TAG, "- Waiting for DUT connection -\n");
 
 	bool connection_active = 0;
-	while (connection_active) {
+	while (connection_active == 0) {
 		sleep(3);
-		ble_manager_conn_is_active(BLE_TEST_DUT_HANDLE, &connection_active);	/* Client Role, always 16 */
+		ret = ble_manager_conn_is_active(BLE_TEST_DUT_HANDLE, &connection_active);	/* Client Role, always 16 */
+		if (ret != BLE_MANAGER_SUCCESS) {
+			RMC_LOG(RMC_SERVER_TAG, "Fail to get connection status[%d]\n", ret);
+		}
 	}
 	RMC_LOG(RMC_CLIENT_TAG, "- DUT connected -\n");					/* As Client, connected */
 
@@ -654,7 +665,7 @@ static void *ble_sut_test_thread(void *data)
 
 ble_sut_check:
 	sleep(5);
-	bool connection_active;
+	bool connection_active = 0;
 	RMC_LOG(RMC_SERVER_TAG, "- Waiting for connection -\n");
 	while (connection_active == 0) {
 		sleep(3);
@@ -664,6 +675,7 @@ ble_sut_check:
 		}
 	}
 	test_retry_count = 0;
+	sleep(10);
 	RMC_LOG(RMC_SERVER_TAG, "- SUT connected -\n");
 
 	/* Server role keep the connection and sending data candomly*/
@@ -686,7 +698,7 @@ ble_sut_check:
 		ret = ble_server_charact_notify(BLE_TEST_NOTI_COMMAND, BLE_TEST_SUT_HANDLE, &packet);	/* Server Role, always 24 */
 		if (ret != BLE_MANAGER_SUCCESS) {
 			test_retry_count++;
-			RMC_LOG(RMC_ERROR_TAG, "Error!! Fail to send Notify[%d]!!\n", ret);
+			RMC_LOG(RMC_ERROR_TAG, "Error!! Fail to send Notification[%d]!!\n", ret);
 		}
 
 		random_send = rand() % 16;
@@ -694,7 +706,7 @@ ble_sut_check:
 		ret = ble_server_charact_indicate(BLE_TEST_INDI_COMMAND, BLE_TEST_SUT_HANDLE, &packet);	/* Server Role, always 24 */
 		if (ret != BLE_MANAGER_SUCCESS) {
 			test_retry_count++;
-			RMC_LOG(RMC_ERROR_TAG, "Error!! Fail to send Notify[%d]!!\n", ret);
+			RMC_LOG(RMC_ERROR_TAG, "Error!! Fail to send Indication[%d]!!\n", ret);
 		}
 		gatt_counter++;
 		send_data[3] = gatt_counter;							/* Keep increase the last byte */
@@ -727,7 +739,7 @@ static void ble_scan_state_changed_cb(ble_scan_state_e scan_state)
 
 static void ble_device_scanned_cb_for_test(ble_scanned_device *scanned_device)
 {
-	RMC_LOG(RMC_CLIENT_TAG, "scanned mac : %02x:%02x:%02x:%02x:%02x:%02x\n", 
+	RMC_LOG(RMC_CLIENT_TAG, "scanned mac : %02x:%02x:%02x:%02x:%02x:%02x\n",
 		scanned_device->addr.mac[0],
 		scanned_device->addr.mac[1],
 		scanned_device->addr.mac[2],
@@ -743,7 +755,7 @@ static void ble_device_scanned_cb_for_connect(ble_scanned_device *scanned_device
 		return;
 	}
 
-	RMC_LOG(RMC_CLIENT_TAG, "Found mac : %02x:%02x:%02x:%02x:%02x:%02x\n", 
+	RMC_LOG(RMC_CLIENT_TAG, "Found mac : %02x:%02x:%02x:%02x:%02x:%02x\n",
 		scanned_device->addr.mac[0],
 		scanned_device->addr.mac[1],
 		scanned_device->addr.mac[2],
@@ -776,13 +788,13 @@ static void ble_device_connected_cb(ble_client_ctx *ctx, ble_device_connected *d
 	RMC_LOG(RMC_CLIENT_TAG, "'%s' is called[%p]\n", __FUNCTION__, ctx);
 
 	RMC_LOG(RMC_CLIENT_TAG, "Conn Handle : %d\n", dev->conn_handle);
-	RMC_LOG(RMC_CLIENT_TAG, "Bonded : %d / CI : %d / SL : %d / MTU : %d\n", 
+	RMC_LOG(RMC_CLIENT_TAG, "Bonded : %d / CI : %d / SL : %d / MTU : %d\n",
 		dev->is_bonded,
 		dev->conn_info.conn_interval,
 		dev->conn_info.slave_latency,
 		dev->conn_info.mtu
 	);
-	RMC_LOG(RMC_CLIENT_TAG, "Conn MAC : %02x:%02x:%02x:%02x:%02x:%02x\n", 
+	RMC_LOG(RMC_CLIENT_TAG, "Conn MAC : %02x:%02x:%02x:%02x:%02x:%02x\n",
 		dev->conn_info.addr.mac[0],
 		dev->conn_info.addr.mac[1],
 		dev->conn_info.addr.mac[2],
@@ -846,7 +858,7 @@ void restart_server(void) {
 
 	ret = ble_server_set_adv_data(data);
 	if (ret != BLE_MANAGER_SUCCESS) {
-		RMC_LOG(RMC_SERVER_TAG, "Fail to set adv raw data ret:[%d]\n");
+		RMC_LOG(RMC_SERVER_TAG, "Fail to set adv raw data ret:[%d]\n", ret);
 		return;
 	}
 	RMC_LOG(RMC_SERVER_TAG, "Set adv raw data ... ok\n");
@@ -856,14 +868,14 @@ void restart_server(void) {
 
 	ret = ble_server_set_adv_resp(data);
 	if (ret != BLE_MANAGER_SUCCESS) {
-		RMC_LOG(RMC_SERVER_TAG, "Fail to set adv resp data ret:[%d]\n");
+		RMC_LOG(RMC_SERVER_TAG, "Fail to set adv resp data ret:[%d]\n", ret);
 		return;
 	}
 	RMC_LOG(RMC_SERVER_TAG, "Set adv resp data ... ok\n");
 
 	ret = ble_server_start_adv();
 	if (ret != BLE_MANAGER_SUCCESS) {
-		RMC_LOG(RMC_SERVER_TAG, "Fail to start adv ret:[%d]\n");
+		RMC_LOG(RMC_SERVER_TAG, "Fail to start adv ret:[%d]\n", ret);
 		return;
 	}
 	RMC_LOG(RMC_SERVER_TAG, "Start adv ... ok\n");
@@ -896,6 +908,127 @@ static void *multi_adv_thread(void *data)
 	return NULL;
 }
 
+static void *ble_write_loop_thread(void *data)
+{
+	ble_result_e ret = BLE_MANAGER_FAIL;
+	ble_data_loop *data_loop = (ble_data_loop *)data;
+	ble_client_ctx *ctx = NULL;
+	ble_data packet;
+	uint16_t loop_count;
+	uint8_t *send_data = NULL;
+
+	if (!data_loop) {
+		RMC_LOG(RMC_CLIENT_TAG, "Missing parameter\n");
+		goto write_loop_end;
+	}
+
+	send_data = malloc(data_loop->data_len);
+	if (!send_data) {
+		RMC_LOG(RMC_CLIENT_TAG, "Malloc Fail\n");
+		goto write_loop_end;
+	}
+
+	RMC_LOG(RMC_CLIENT_TAG, "Write Loop Start for conn_handle: %d\n", data_loop->conn_handle);
+	RMC_LOG(RMC_CLIENT_TAG, "data_len: %d, loop: %d, delay:%dms\n", data_loop->data_len, data_loop->loop, data_loop->delay);
+
+	loop_count = data_loop->loop;
+	packet.data = (uint8_t *)send_data;
+	packet.length = data_loop->data_len;
+
+	while(loop_count) {
+		usleep(data_loop->delay * 1000);										/* Wait ms */
+		ctx = ble_find_ctx(data_loop->conn_handle);
+		if (ctx) {
+			ret = ble_client_operation_write(ctx, 0x006c, &packet);
+		} else {
+			RMC_LOG(RMC_CLIENT_TAG, "conn_handle not found\n");
+			goto write_loop_end;
+		}
+		if (ret != BLE_MANAGER_SUCCESS) {
+			RMC_LOG(RMC_CLIENT_TAG, "Fail to write[%d]\n", ret);
+			goto write_loop_end;
+		} else {
+			RMC_LOG(RMC_CLIENT_TAG, "Success to write data, length: %d\n", packet.length);
+		}
+		if (ble_end_loop) {
+			ble_end_loop = 0;
+			goto write_loop_end;
+		}
+		loop_count--;
+	}
+
+write_loop_end:
+	if (data_loop) {
+		free(data_loop);
+	}
+	if (send_data) {
+		free(send_data);
+	}
+	RMC_LOG(RMC_CLIENT_TAG, "Write Loop End\n");
+	return NULL;
+}
+
+static void *ble_command_loop_thread(void *data)
+{
+	ble_result_e ret = BLE_MANAGER_FAIL;
+	ble_data_loop *data_loop = (ble_data_loop *)data;
+	ble_data packet;
+	uint16_t loop_count;
+	uint8_t *send_data = NULL;
+
+	if (!data_loop) {
+		RMC_LOG(RMC_SERVER_TAG, "Missing parameter\n");
+		goto command_loop_end;
+	}
+
+	send_data = malloc(data_loop->data_len);
+	if (!send_data) {
+		RMC_LOG(RMC_SERVER_TAG, "Malloc Fail\n");
+		goto command_loop_end;
+	}
+
+	if (data_loop->command == BLE_TEST_NOTI_COMMAND) {
+		RMC_LOG(RMC_SERVER_TAG, "Notification Loop Start for conn_handle: %d\n", data_loop->conn_handle);
+	} else {
+		RMC_LOG(RMC_SERVER_TAG, "Indication Loop Start for conn_handle: %d\n", data_loop->conn_handle);
+	}
+	RMC_LOG(RMC_SERVER_TAG, "data_len: %d, loop: %d, delay:%dms\n", data_loop->data_len, data_loop->loop, data_loop->delay);
+
+	loop_count = data_loop->loop;
+	packet.data = (uint8_t *)send_data;
+	packet.length = data_loop->data_len;
+
+	while(loop_count) {
+		usleep(data_loop->delay * 1000);										/* Wait ms */
+
+		if (data_loop->command == BLE_TEST_NOTI_COMMAND) {
+			ret = ble_server_charact_notify(BLE_TEST_NOTI_COMMAND, data_loop->conn_handle, &packet);
+		} else {
+			ret = ble_server_charact_indicate(BLE_TEST_INDI_COMMAND, data_loop->conn_handle, &packet);
+		}
+		if (ret != BLE_MANAGER_SUCCESS) {
+			RMC_LOG(RMC_SERVER_TAG, "Fail to send noti/indi[%d] \n", ret);
+			goto command_loop_end;
+		} else {
+			RMC_LOG(RMC_SERVER_TAG, "Success to send noti/indi data, length: %d\n", packet.length);
+		}
+		loop_count--;
+		if (ble_end_loop) {
+			ble_end_loop = 0;
+			goto command_loop_end;
+		}
+	}
+
+command_loop_end:
+	if (data_loop) {
+		free(data_loop);
+	}
+	if (send_data) {
+		free(send_data);
+	}
+	RMC_LOG(RMC_SERVER_TAG, "Noti/Indi Loop End\n");
+	return NULL;
+}
 
 static void ble_server_connected_cb(ble_conn_handle con_handle, ble_server_connection_type_e conn_type, uint8_t mac[BLE_BD_ADDR_MAX_LEN], uint8_t adv_handle)
 {
@@ -975,7 +1108,7 @@ static void utc_gatt_cb(ble_server_attr_cb_type_e type, ble_conn_handle conn_han
 	}
 	RMC_LOG(RMC_SERVER_TAG, "[GATT_CB][%s] type : %d / handle : %d / attr : %02x \n", arg_str, type, conn_handle, attr_handle);
 }
- 
+
 static ble_server_gatt_t gatt_profile[] = {
 	{
 		.type = BLE_SERVER_GATT_SERVICE,
@@ -985,23 +1118,23 @@ static ble_server_gatt_t gatt_profile[] = {
 	},
 
 	{
-		.type = BLE_SERVER_GATT_CHARACT, 
-		.uuid = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x02}, 
-		.uuid_length = 16, 
-		.property = BLE_ATTR_PROP_RWN | BLE_ATTR_PROP_WRITE_NO_RSP, 
-		.permission = BLE_ATTR_PERM_R_PERMIT | BLE_ATTR_PERM_W_PERMIT, 
-		.attr_handle = 0x006b, 
-		.cb = utc_cb_charact_a_1, 
+		.type = BLE_SERVER_GATT_CHARACT,
+		.uuid = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x02},
+		.uuid_length = 16,
+		.property = BLE_ATTR_PROP_RWN | BLE_ATTR_PROP_WRITE_NO_RSP,
+		.permission = BLE_ATTR_PERM_R_PERMIT | BLE_ATTR_PERM_W_PERMIT,
+		.attr_handle = 0x006b,
+		.cb = (ble_server_cb_t)utc_cb_charact_a_1,
 		.arg = "char_a_1"
 	},
 
 	{
-		.type = BLE_SERVER_GATT_DESC, 
-		.uuid = {0x02, 0x29}, 
-		.uuid_length = 2, 
-		.permission = BLE_ATTR_PERM_R_PERMIT | BLE_ATTR_PERM_W_PERMIT, 
-		.attr_handle = 0x006c, 
-		.cb = utc_cb_desc_b_1, 
+		.type = BLE_SERVER_GATT_DESC,
+		.uuid = {0x02, 0x29},
+		.uuid_length = 2,
+		.permission = BLE_ATTR_PERM_R_PERMIT | BLE_ATTR_PERM_W_PERMIT,
+		.attr_handle = 0x006c,
+		.cb = (ble_server_cb_t)utc_cb_desc_b_1,
 		.arg = "desc_b_1",
 	},
 
@@ -1019,7 +1152,7 @@ static ble_server_gatt_t gatt_profile[] = {
 		.property =  BLE_ATTR_PROP_READ|BLE_ATTR_PROP_WRITE|BLE_ATTR_PROP_NOTIFY,
 		.permission = BLE_ATTR_PERM_R_PERMIT|BLE_ATTR_PERM_W_PERMIT,
 		.attr_handle = BLE_TEST_NOTI_COMMAND,
-		.cb = utc_gatt_cb,
+		.cb = (ble_server_cb_t)utc_gatt_cb,
 		.arg = "BLE_TEST_NOTI_COMMAND"
 	},
 
@@ -1029,10 +1162,10 @@ static ble_server_gatt_t gatt_profile[] = {
 		.uuid_length = 2,
 		.permission = BLE_ATTR_PERM_R_PERMIT|BLE_ATTR_PERM_W_PERMIT,
 		.attr_handle = BLE_TEST_NOTI_CCCD,
-		.cb = utc_cb_desc,
+		.cb = (ble_server_cb_t)utc_cb_desc,
 		.arg = "BLE_TEST_NOTI_CCCD"
 	},
-	
+
 	{
 		.type = BLE_SERVER_GATT_SERVICE,
 		.uuid = {0x11,0xB6,0x6E,0x45,0xA7,0x68,0x9D,0x8D,0x9A,0x40,0x17,0x2B,0xE9,0xCB,0xF2,0x23},
@@ -1047,7 +1180,7 @@ static ble_server_gatt_t gatt_profile[] = {
 		.property =  BLE_ATTR_PROP_READ|BLE_ATTR_PROP_WRITE|BLE_ATTR_PROP_INDICATE,
 		.permission = BLE_ATTR_PERM_R_PERMIT|BLE_ATTR_PERM_W_PERMIT,
 		.attr_handle = BLE_TEST_INDI_COMMAND,
-		.cb = utc_gatt_cb,
+		.cb = (ble_server_cb_t)utc_gatt_cb,
 		.arg = "BLE_TEST_INDI_COMMAND"
 	},
 
@@ -1057,7 +1190,7 @@ static ble_server_gatt_t gatt_profile[] = {
 		.uuid_length = 2,
 		.permission = BLE_ATTR_PERM_R_PERMIT|BLE_ATTR_PERM_W_PERMIT,
 		.attr_handle = BLE_TEST_INDI_CCCD,
-		.cb = utc_cb_desc,
+		.cb = (ble_server_cb_t)utc_cb_desc,
 		.arg = "BLE_TEST_INDI_CCCD"
 	},
 };
@@ -1208,7 +1341,7 @@ static int ble_connect_common(ble_client_ctx *ctx, ble_addr *addr, bool is_auto)
 	}
 
 	attr_handle = 0x006e;
-	ret = ble_client_operation_enable_indication(ctx, attr_handle);
+	ret = ble_client_operation_enable_notification(ctx, attr_handle);
 	if (ret != BLE_MANAGER_SUCCESS) {
 		RMC_LOG(RMC_CLIENT_TAG, "Fail to enable noti handle2[%d]\n", ret);
 	} else {
@@ -1420,7 +1553,7 @@ int ble_rmc_main(int argc, char *argv[])
 					goto ble_rmc_done;
 				}
 				RMC_LOG(RMC_CLIENT_TAG, "Bonded Dev : %d\n", dev_count);
-				
+
 				for (int i = 0; i < dev_count; i++) {
 					mac = dev_list[i].bd_addr.mac;
 					RMC_LOG(RMC_CLIENT_TAG, "DEV#%d[%d] : %02x:%02x:%02x:%02x:%02x:%02x\n", i + 1, dev_list[i].bd_addr.type, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -1526,7 +1659,7 @@ int ble_rmc_main(int argc, char *argv[])
 			RMC_LOG(RMC_CLIENT_TAG, "Total List : %u\n", count);
 			for (i = 0; i < count; i++) {
 				addr = &addr_list[i];
-				RMC_LOG(RMC_CLIENT_TAG, "#%d Mac[%d] : %02x:%02x:%02x:%02x:%02x:%02x\n", i+1, addr->type, addr->mac[0], 
+				RMC_LOG(RMC_CLIENT_TAG, "#%d Mac[%d] : %02x:%02x:%02x:%02x:%02x:%02x\n", i+1, addr->type, addr->mac[0],
 				addr->mac[1], addr->mac[2], addr->mac[3], addr->mac[4], addr->mac[5]);
 			}
 		} else {
@@ -1535,7 +1668,7 @@ int ble_rmc_main(int argc, char *argv[])
 		}
 	}
 
-	/* 
+	/*
 	* [ Scan ] Usage :
 	* 1. Normal Scan with MAX Scan Timeout
 	* TASH>> ble_rmc scan 1
@@ -1564,7 +1697,6 @@ int ble_rmc_main(int argc, char *argv[])
 			ret = ble_client_start_scan(NULL, &scan_config);
 			if (ret != BLE_MANAGER_SUCCESS) {
 				RMC_LOG(RMC_CLIENT_TAG, "Scan start fail[%d]\n", ret);
-				goto ble_rmc_done;
 			}
 		} else if (argc >= 3 && strncmp(argv[2], "2", 2) == 0) {
 			RMC_LOG(RMC_CLIENT_TAG, "Scan Start with WhiteList!\n");
@@ -1581,7 +1713,6 @@ int ble_rmc_main(int argc, char *argv[])
 			ret = ble_client_start_scan(&filter, &scan_config);
 			if (ret != BLE_MANAGER_SUCCESS) {
 				RMC_LOG(RMC_CLIENT_TAG, "Scan start fail[%d]\n", ret);
-				goto ble_rmc_done;
 			}
 		} else if (argc >= 3 && strncmp(argv[2], "3", 2) == 0) {
 			RMC_LOG(RMC_CLIENT_TAG, "Scan Start with Packet Filter!\n");
@@ -1598,14 +1729,12 @@ int ble_rmc_main(int argc, char *argv[])
 			ret = ble_client_start_scan(&filter, &scan_config);
 			if (ret != BLE_MANAGER_SUCCESS) {
 				RMC_LOG(RMC_CLIENT_TAG, "Scan start fail[%d]\n", ret);
-				goto ble_rmc_done;
 			}
 		} else {
 			RMC_LOG(RMC_CLIENT_TAG, "Scan stop\n");
 			ret = ble_client_stop_scan();
 			if (ret != BLE_MANAGER_SUCCESS) {
 				RMC_LOG(RMC_CLIENT_TAG, "Scan stop fail[%d]\n", ret);
-				goto ble_rmc_done;
 			}
 		}
 	}
@@ -1651,7 +1780,6 @@ int ble_rmc_main(int argc, char *argv[])
 			}
 			if (ret != BLE_MANAGER_SUCCESS) {
 				RMC_LOG(RMC_CLIENT_TAG, "Stop auto connection fail[%d]\n", ret);
-				goto ble_rmc_done;
 			}
 		}
 	}
@@ -1659,7 +1787,7 @@ int ble_rmc_main(int argc, char *argv[])
 	if (strncmp(argv[1], "connect", 8) == 0) {
 		ble_client_ctx *ctx = NULL;
 		ble_addr addr_info = { 0, };
-		hexdata_str_to_bd_addr(argv[2], addr_info.mac, 6); 
+		hexdata_str_to_bd_addr(argv[2], addr_info.mac, 6);
 
 		// 3. create ctx
 		ctx = ble_client_create_ctx(&client_config);
@@ -1724,25 +1852,25 @@ int ble_rmc_main(int argc, char *argv[])
 		ret = ble_server_one_shot_adv_init();
 		uint8_t type1 = 0;
 		uint8_t adv_id_0 = 0;
-		ble_data adv_data_1[1] = { 0x99, };
-		ble_data scan_rsp_data_1[1] = { 0x98, };
-		ble_data adv_data_2[1] = { 0x99, };
-		ble_data scan_rsp_data_2[1] = { 0x98, };
+		ble_data adv_data_1;
+		ble_data scan_rsp_data_1;
+		ble_data adv_data_2;
+		ble_data scan_rsp_data_2;
 
-		adv_data_1->data = g_adv_raw_1;
-		adv_data_1->length = sizeof(g_adv_raw_1);
-		scan_rsp_data_1->data = g_adv_resp_1;
-		scan_rsp_data_1->length = sizeof(g_adv_resp_1);
-		ret = ble_server_one_shot_adv_set(adv_id_0, adv_data_1, scan_rsp_data_1, type1);
+		adv_data_1.data = g_adv_raw_1;
+		adv_data_1.length = sizeof(g_adv_raw_1);
+		scan_rsp_data_1.data = g_adv_resp_1;
+		scan_rsp_data_1.length = sizeof(g_adv_resp_1);
+		ret = ble_server_one_shot_adv_set(adv_id_0, &adv_data_1, &scan_rsp_data_1, type1);
 		RMC_LOG(RMC_SERVER_TAG, "Adv id: %d set ret: [%d]\n", adv_id_0, ret);
 
 		uint8_t type3 = 3;
 		uint8_t adv_id_1 = 1;
-		adv_data_2->data = g_adv_raw_2;
-		adv_data_2->length = sizeof(g_adv_raw_2);
-		scan_rsp_data_2->data = g_adv_resp_2;
-		scan_rsp_data_2->length = sizeof(g_adv_resp_2);
-		ret = ble_server_one_shot_adv_set(adv_id_1, adv_data_2, scan_rsp_data_2, type3);
+		adv_data_2.data = g_adv_raw_2;
+		adv_data_2.length = sizeof(g_adv_raw_2);
+		scan_rsp_data_2.data = g_adv_resp_2;
+		scan_rsp_data_2.length = sizeof(g_adv_resp_2);
+		ret = ble_server_one_shot_adv_set(adv_id_1, &adv_data_2, &scan_rsp_data_2, type3);
 		RMC_LOG(RMC_SERVER_TAG, "Adv id: %d set ret: [%d]\n", adv_id_1, ret);
 	}
 
@@ -1770,7 +1898,7 @@ int ble_rmc_main(int argc, char *argv[])
 	}
 
 	if (strncmp(argv[1], "link", 4) == 0) {
-		bool connection_active;
+		bool connection_active = 0;
 		ret = ble_manager_conn_is_any_active(&connection_active);
 		if (ret != BLE_MANAGER_SUCCESS) {
 			RMC_LOG(RMC_TAG, "Connection active fail[%d]\n", ret);
@@ -1788,7 +1916,7 @@ int ble_rmc_main(int argc, char *argv[])
 				}
 				RMC_LOG(RMC_SERVER_TAG, "conn_handle: %d active connection [%d]\n", connected_list.conn_handle[i], connection_active);
 				uint8_t addrr [BLE_BD_ADDR_MAX_LEN] = { 0 };
-				
+
 				ret = ble_server_get_mac_addr_by_conn_handle(connected_list.conn_handle[i], addrr);
 				if (ret != BLE_MANAGER_SUCCESS) {
 					RMC_LOG(RMC_TAG, "Connection get connection addr fail[%d]\n", ret);
@@ -1851,7 +1979,7 @@ int ble_rmc_main(int argc, char *argv[])
 		ret = ble_server_set_adv_tx_power(power);
 		if (ret != BLE_MANAGER_SUCCESS) {
 			RMC_LOG(RMC_SERVER_TAG, "Set Adv Power fail: [%d]\n", ret);
-		} 
+		}
 	}
 
 	/* Server Test */
@@ -1899,7 +2027,8 @@ int ble_rmc_main(int argc, char *argv[])
 				hexdata_str_to_bd_addr(argv[5], addrr, BLE_BD_ADDR_MAX_LEN);
 				RMC_LOG(RMC_SERVER_TAG, "Addr = [%02x:%02x:%02x:%02x:%02x:%02x]\n",
 					addrr[0], addrr[1], addrr[2], addrr[3], addrr[4], addrr[5] );
-
+				_reverse_mac(addrr, addr_info.mac);
+				addr_info.type = addr_type;
 			} else if (strncmp(argv[3], "ind", 4) == 0) {
 				adv_type = BLE_ADV_TYPE_IND;
 				RMC_LOG(RMC_SERVER_TAG, "Adv type = BLE_ADV_TYPE_IND\n");
@@ -1916,8 +2045,6 @@ int ble_rmc_main(int argc, char *argv[])
 				RMC_LOG(RMC_SERVER_TAG, "Wrong argument\n");
 				goto ble_rmc_done;
 			}
-			memcpy(addr_info.mac, addrr, BLE_BD_ADDR_MAX_LEN);
-			addr_info.type = addr_type;
 			ble_server_set_adv_type(adv_type, &addr_info);
 		}
 
@@ -2056,6 +2183,35 @@ int ble_rmc_main(int argc, char *argv[])
 		}
 	}
 
+	if (strncmp(argv[1], "writeloop", 10) == 0) {
+		ble_data_loop *data_loop;
+		if (argc > 5) {
+			data_loop = malloc(sizeof(ble_data_loop));
+			if (!data_loop) {
+				RMC_LOG(RMC_SERVER_TAG, "Malloc Fail\n");
+				goto ble_rmc_done;
+			}
+			data_loop->conn_handle = atoi(argv[2]);
+			data_loop->data_len = atoi(argv[3]);
+			data_loop->loop = atoi(argv[4]);
+			data_loop->delay = atoi(argv[5]);
+			ble_end_loop = 0;
+		} else if (argc == 3 && strncmp(argv[2], "end", 4) == 0) {
+			ble_end_loop = 1;
+			goto ble_rmc_done;
+		} else {
+			RMC_LOG(RMC_SERVER_TAG, "Wrong argument\n");
+			goto ble_rmc_done;
+		}
+		pthread_t pid;
+		if ((ret = pthread_create(&pid, NULL, (pthread_startroutine_t)ble_write_loop_thread, data_loop)) != 0) {
+			RMC_LOG(RMC_SERVER_TAG, "pthread_create failed, status=%d\n", ret);
+			free(data_loop);
+		} else {
+			pthread_detach(pid);
+		}
+	}
+
 	if (strncmp(argv[1], "write", 6) == 0) {
 		ble_client_ctx *ctx = NULL;
 		uint16_t conn_handle;
@@ -2078,16 +2234,15 @@ int ble_rmc_main(int argc, char *argv[])
 			packet.length = 4;
 		} else if (argc > 3) {
 			send_data[2] = atoi(argv[3]);
-			send_data[3 ] = 0;
+			send_data[3] = 0;
 			packet.length = 3;
 		}
-
 		ctx = ble_find_ctx(conn_handle);
 		if (ctx) {
 			ret = ble_client_operation_write(ctx, 0x006c, &packet);
 		}
 		if (ret != BLE_MANAGER_SUCCESS) {
-			RMC_LOG(RMC_CLIENT_TAG, "Fail to write\n", ret);
+			RMC_LOG(RMC_CLIENT_TAG, "Fail to write[%d]\n", ret);
 		} else {
 			RMC_LOG(RMC_CLIENT_TAG, "Success to write data, len: %d, data: %x %x %x %x\n", packet.length, send_data[0], send_data[1], send_data[2], send_data[3]);
 		}
@@ -2113,7 +2268,7 @@ int ble_rmc_main(int argc, char *argv[])
 			ret = ble_client_operation_read(ctx, 0x006c, &packet);
 		}
 		if (ret != BLE_MANAGER_SUCCESS) {
-			RMC_LOG(RMC_CLIENT_TAG, "Fail to read\n", ret);
+			RMC_LOG(RMC_CLIENT_TAG, "Fail to read[%d]\n", ret);
 		} else {
 			RMC_LOG(RMC_CLIENT_TAG, "Success to read data\n");
 		}
@@ -2130,7 +2285,7 @@ int ble_rmc_main(int argc, char *argv[])
 			RMC_LOG(RMC_CLIENT_TAG, "Wrong argument\n");
 			goto ble_rmc_done;
 		}
-		if (strncmp(argv[1], "noti_en", 8)) {
+		if (strncmp(argv[1], "noti_en", 8) == 0) {
 			noti_indi = 1;
 		}
 		if (argc > 3) {
@@ -2162,7 +2317,39 @@ int ble_rmc_main(int argc, char *argv[])
 		} else {
 			RMC_LOG(RMC_CLIENT_TAG, "Success to enable/disable noti/indi handle.\n");
 		}
-		goto ble_rmc_done;
+	}
+
+	if ((strncmp(argv[1], "notiloop", 9) == 0) || (strncmp(argv[1], "indiloop", 9) == 0)) {
+		ble_data_loop *data_loop;
+		if (argc > 5) {
+			data_loop = malloc(sizeof(ble_data_loop));
+			if (!data_loop) {
+				RMC_LOG(RMC_SERVER_TAG, "Malloc Fail\n");
+				goto ble_rmc_done;
+			}
+			data_loop->command = BLE_TEST_INDI_COMMAND;
+			if (strncmp(argv[1], "notiloop", 9) == 0) {
+				data_loop->command = BLE_TEST_NOTI_COMMAND;
+			}
+			data_loop->conn_handle = atoi(argv[2]);
+			data_loop->data_len = atoi(argv[3]);
+			data_loop->loop = atoi(argv[4]);
+			data_loop->delay = atoi(argv[5]);
+			ble_end_loop = 0;
+		} else if (argc == 3 && strncmp(argv[2], "end", 4) == 0) {
+			ble_end_loop = 1;
+			goto ble_rmc_done;
+		} else {
+			RMC_LOG(RMC_SERVER_TAG, "Wrong argument\n");
+			goto ble_rmc_done;
+		}
+		pthread_t pid;
+		if ((ret = pthread_create(&pid, NULL, (pthread_startroutine_t)ble_command_loop_thread, data_loop)) != 0) {
+			RMC_LOG(RMC_SERVER_TAG, "pthread_create failed, status=%d\n", ret);
+			free(data_loop);
+		} else {
+			pthread_detach(pid);
+		}
 	}
 
 	if ((strncmp(argv[1], "noti", 5) == 0) || (strncmp(argv[1], "indi", 5) == 0)) {
@@ -2174,9 +2361,9 @@ int ble_rmc_main(int argc, char *argv[])
 			conn_handle = atoi(argv[2]);
 		} else {
 			RMC_LOG(RMC_CLIENT_TAG, "Wrong argument\n");
-			goto ble_rmc_done; 
+			goto ble_rmc_done;
 		}
-		if (strncmp(argv[1], "noti", 5)) {
+		if (strncmp(argv[1], "noti", 5) == 0) {
 			noti_indi = 1;
 		}
 
@@ -2189,7 +2376,7 @@ int ble_rmc_main(int argc, char *argv[])
 			packet.length = 4;
 		} else if (argc > 3) {
 			send_data[2] = atoi(argv[3]);
-			send_data[3 ] = 0;
+			send_data[3] = 0;
 			packet.length = 3;
 		}
 		if (noti_indi) {
@@ -2207,7 +2394,7 @@ int ble_rmc_main(int argc, char *argv[])
 	if (strncmp(argv[1], "coc", 4) == 0) {
 		if (argc < 3) {
 			RMC_LOG(RMC_SERVER_TAG, "Wrong argument\n");
-			goto ble_rmc_done; 
+			goto ble_rmc_done;
 		}
 		if (strncmp(argv[2], "init", 5) == 0) {
 			RMC_LOG(RMC_SERVER_TAG, "COC init\n");
@@ -2225,7 +2412,7 @@ int ble_rmc_main(int argc, char *argv[])
 				psm = atoi(argv[4]);
 			} else {
 				RMC_LOG(RMC_SERVER_TAG, "Wrong argument\n");
-				goto ble_rmc_done; 
+				goto ble_rmc_done;
 			}
 			RMC_LOG(RMC_SERVER_TAG, "is_reg %d psm %d\n", is_reg, psm);
 			ret = ble_coc_register_psm(is_reg, psm);
@@ -2340,7 +2527,7 @@ int ble_rmc_main(int argc, char *argv[])
 		}
 	}
 
-	/* 
+	/*
 	* arg[1] = "test"				>> Test command
 	* arg[2] = "dut/sut" or "scan"	>> DUT or SUT device or scan operation
 	* arg[3] = "<mac_address>"		>> device that need to connect to
@@ -2383,7 +2570,7 @@ int ble_rmc_main(int argc, char *argv[])
 		if (test_started) {
 			RMC_LOG(RMC_CLIENT_TAG, "Test already started\n");
 			goto ble_rmc_done;
-		} 
+		}
 		if (test_device_role) {
 			if ((ret = pthread_create(&pid, NULL, (pthread_startroutine_t)ble_sut_test_thread, NULL)) != 0) {
 				RMC_LOG(RMC_CLIENT_TAG, "pthread_create failed, status=%d\n", ret);
